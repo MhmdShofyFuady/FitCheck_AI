@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" fill="none">
+  <title>FitCheck AI — Continuous Ribbon F+C Monogram</title>
+  <desc>Pure vector paths for the FitCheck AI F+C continuous ribbon monogram with Electric Azure AI sparkle accent</desc>
+  <g id="Node-Monogram-FC">
+    <path id="Node-Ribbon-FC"
+      d="M 668 298
+         C 626 266, 576 252, 520 252
+         C 376.4 252, 260 368.4, 260 512
+         C 260 655.6, 376.4 772, 520 772
+         C 584 772, 642 754, 684 716
+         M 436 754
+         L 436 428
+         Q 436 384, 480 384
+         L 620 384
+         M 436 528
+         L 588 528"
+      stroke="#FBF7EE"
+      stroke-width="60"
+      stroke-linecap="round"
+      stroke-linejoin="round" />
+    <path id="Node-AI-Sparkle"
+      d="M 720 332
+         Q 720 384, 772 384
+         Q 720 384, 720 436
+         Q 720 384, 668 384
+         Q 720 384, 720 332 Z"
+      fill="#2F80ED" />
+  </g>
+</svg>
