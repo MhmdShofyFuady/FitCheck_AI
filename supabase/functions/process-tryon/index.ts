@@ -1,7 +1,9 @@
+// @ts-nocheck — Deno runtime (URL imports + `Deno` global); VS Code's Node TS server can't resolve them.
 // Supabase Edge Function: process-tryon
 // Runtime: Deno (Supabase Edge Functions)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { Client } from 'https://esm.sh/@gradio/client';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,9 +11,10 @@ const corsHeaders = {
 };
 
 interface ProcessTryOnPayload {
-  job_id: string;
+  job_id?: string;
   person_image_path?: string;
   garment_image_path?: string;
+  prompt?: string;
 }
 
 Deno.serve(async (req: Request) => {
@@ -47,6 +50,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = (await req.json()) as ProcessTryOnPayload;
+    const hfToken = Deno.env.get('HF_TOKEN');
+
     if (!body.job_id) {
       return new Response(JSON.stringify({ error: 'job_id is required' }), {
         status: 400,
@@ -61,29 +66,56 @@ Deno.serve(async (req: Request) => {
       .eq('id', body.job_id)
       .eq('user_id', user.id);
 
-    // TODO: Integrasi Google Vertex AI Virtual Try-On (model: virtual-try-on-001)
-    // 1. Unduh gambar dari bucket privat 'tryon-photos' menggunakan body.person_image_path & body.garment_image_path
-    // 2. Konversi kedua gambar ke base64
-    // 3. Lakukan HTTP POST ke endpoint Google Vertex AI:
-    //    https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/virtual-try-on-001:predict
-    //    dengan payload:
-    //    {
-    //      instances: [{
-    //        personImage: { image: { bytesBase64Encoded: personBase64 } },
-    //        productImages: [{ image: { bytesBase64Encoded: garmentBase64 } }]
-    //      }],
-    //      parameters: { sampleCount: 1 }
-    //    }
-    // 4. Simpan hasil gambar base64 dari Vertex AI ke Supabase Storage (`${user.id}/results/${body.job_id}.jpg`)
+    let resultPath = `${user.id}/results/${body.job_id}-mock.jpg`;
+    let signedResultUrl: string | undefined;
 
-    const mockResultPath = `${user.id}/results/${body.job_id}-mock.jpg`;
+    // 2. Integrasi Gratis Hugging Face Spaces ZeroGPU (yisol/IDM-VTON)
+    if (body.person_image_path && body.garment_image_path) {
+      const [personDownload, garmentDownload] = await Promise.all([
+        supabase.storage.from('tryon-photos').download(body.person_image_path),
+        supabase.storage.from('tryon-photos').download(body.garment_image_path),
+      ]);
 
-    // 2. Tandai job selesai ('done') dengan path hasil sementara (mock)
+      if (personDownload.data && garmentDownload.data) {
+        const app = await Client.connect(
+          'yisol/IDM-VTON',
+          hfToken ? { hf_token: hfToken } : undefined
+        );
+        const prediction = await app.predict('/tryon', [
+          { background: personDownload.data, layers: [], composite: null },
+          garmentDownload.data,
+          body.prompt || 'Short sleeve top',
+          true,
+          false,
+          30,
+          42,
+        ]);
+
+        const outputUrl = prediction?.data?.[0]?.url;
+        if (outputUrl) {
+          const aiRes = await fetch(outputUrl);
+          if (aiRes.ok) {
+            const outputBlob = await aiRes.blob();
+            resultPath = `${user.id}/results/${body.job_id}.jpg`;
+            await supabase.storage
+              .from('tryon-photos')
+              .upload(resultPath, outputBlob, { contentType: 'image/jpeg', upsert: true });
+
+            const { data: signed } = await supabase.storage
+              .from('tryon-photos')
+              .createSignedUrl(resultPath, 3600);
+            signedResultUrl = signed?.signedUrl;
+          }
+        }
+      }
+    }
+
+    // 3. Tandai job selesai ('done')
     const { data: updatedJob, error: updateError } = await supabase
       .from('tryon_jobs')
       .update({
         status: 'done',
-        result_image_path: mockResultPath,
+        result_image_path: resultPath,
         updated_at: new Date().toISOString(),
       })
       .eq('id', body.job_id)
@@ -97,8 +129,9 @@ Deno.serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({
-        message: 'Try-on job processed (mock)',
+        message: signedResultUrl ? 'Try-on processed via IDM-VTON' : 'Try-on processed (mock)',
         job: updatedJob,
+        result_url: signedResultUrl,
       }),
       {
         status: 200,

@@ -70,3 +70,6 @@ export function calculateFit(
     warnings,
   };
 }
+
+export const buildTryOnPrompt = (fit: FitCalculationResult) =>
+  `Replace the person's top with the garment from the reference image, ${fit.fit_label} fit (${fit.chest_ease_cm} cm chest ease). Preserve identity, pose and lighting.`;

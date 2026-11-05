@@ -121,7 +121,36 @@ create policy "storage_tryon_insert_own" on storage.objects
   for insert with check (
     bucket_id = 'tryon-photos' and auth.uid()::text = (storage.foldername(name))[1]
   );
+create policy "storage_tryon_update_own" on storage.objects
+  for update using (
+    bucket_id = 'tryon-photos' and auth.uid()::text = (storage.foldername(name))[1]
+  ) with check (
+    bucket_id = 'tryon-photos' and auth.uid()::text = (storage.foldername(name))[1]
+  );
 create policy "storage_tryon_delete_own" on storage.objects
   for delete using (
     bucket_id = 'tryon-photos' and auth.uid()::text = (storage.foldername(name))[1]
   );
+
+-- 5. Trigger: Otomatis buat baris profil saat user baru mendaftar
+create or replace function public.handle_new_user()
+returns trigger as $$
+begin
+  insert into public.profiles (id)
+  values (new.id)
+  on conflict (id) do nothing;
+  return new;
+end;
+$$ language plpgsql security definer;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- 6. Indexes untuk performa query
+create index if not exists idx_garments_user_id on public.garments(user_id);
+create index if not exists idx_tryon_jobs_user_id on public.tryon_jobs(user_id);
+create index if not exists idx_tryon_jobs_status on public.tryon_jobs(status);
+create index if not exists idx_fit_results_user_id on public.fit_results(user_id);
+create index if not exists idx_fit_results_job_id on public.fit_results(job_id);
