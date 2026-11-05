@@ -20,6 +20,7 @@ export type TryOnStackParamList = {
     body: BodyMeasurements;
     garment: GarmentMeasurements;
     fitResult: FitCalculationResult;
+    resultImageUri?: string;
     jobId?: string;
   };
 };

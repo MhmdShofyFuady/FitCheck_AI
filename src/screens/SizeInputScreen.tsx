@@ -9,22 +9,27 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { TryOnStackParamList } from '../navigation/types';
 import {
   BodyMeasurements,
+  buildTryOnPrompt,
   calculateFit,
   GarmentMeasurements,
   StretchType,
 } from '../utils/estimator';
 import { useAuth } from '../context/AuthContext';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { theme } from '../theme';
 
 type Props = NativeStackScreenProps<TryOnStackParamList, 'SizeInput'>;
 
+const STORAGE_KEY = '@user_profile_measurements';
+
 const STRETCH_OPTIONS: { label: string; value: StretchType }[] = [
   { label: 'Kaku', value: 'kaku' },
-  { label: 'Sedikit Stretch', value: 'sedikit_stretch' },
+  { label: 'Semi Stretch', value: 'sedikit_stretch' },
   { label: 'Stretch', value: 'stretch' },
 ];
 
@@ -32,14 +37,12 @@ export default function SizeInputScreen({ route, navigation }: Props) {
   const { personPhotoUri, garmentPhotoUri } = route.params;
   const { user, isDemo } = useAuth();
 
-  // Ukuran Tubuh
   const [chestCm, setChestCm] = useState('96');
   const [heightCm, setHeightCm] = useState('172');
   const [weightKg, setWeightKg] = useState('68');
   const [waistCm, setWaistCm] = useState('82');
   const [shoulderCm, setShoulderCm] = useState('44');
 
-  // Ukuran Kaos (Datar / Flat)
   const [chestWidthCm, setChestWidthCm] = useState('52');
   const [hemWidthCm, setHemWidthCm] = useState('52');
   const [garmentShoulderCm, setGarmentShoulderCm] = useState('45');
@@ -47,27 +50,95 @@ export default function SizeInputScreen({ route, navigation }: Props) {
   const [stretchType, setStretchType] = useState<StretchType>('kaku');
 
   const [submitting, setSubmitting] = useState(false);
+  const [savingBody, setSavingBody] = useState(false);
 
   useEffect(() => {
-    if (!user || isDemo || !isSupabaseConfigured) return;
-    supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!data) return;
-        if (data.chest_cm != null) setChestCm(String(data.chest_cm));
-        if (data.height_cm != null) setHeightCm(String(data.height_cm));
-        if (data.weight_kg != null) setWeightKg(String(data.weight_kg));
-        if (data.waist_cm != null) setWaistCm(String(data.waist_cm));
-        if (data.shoulder_cm != null) setShoulderCm(String(data.shoulder_cm));
-      });
+    const loadProfile = async () => {
+      let found = false;
+      if (user && !isDemo && isSupabaseConfigured) {
+        try {
+          const { data } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (data && (data.chest_cm != null || data.height_cm != null)) {
+            if (data.chest_cm != null) setChestCm(String(data.chest_cm));
+            if (data.height_cm != null) setHeightCm(String(data.height_cm));
+            if (data.weight_kg != null) setWeightKg(String(data.weight_kg));
+            if (data.waist_cm != null) setWaistCm(String(data.waist_cm));
+            if (data.shoulder_cm != null) setShoulderCm(String(data.shoulder_cm));
+            found = true;
+          }
+        } catch {}
+      }
+
+      if (!found) {
+        try {
+          const cached = await AsyncStorage.getItem(STORAGE_KEY);
+          if (cached) {
+            const data = JSON.parse(cached);
+            if (data.chest_cm != null) setChestCm(String(data.chest_cm));
+            if (data.height_cm != null) setHeightCm(String(data.height_cm));
+            if (data.weight_kg != null) setWeightKg(String(data.weight_kg));
+            if (data.waist_cm != null) setWaistCm(String(data.waist_cm));
+            if (data.shoulder_cm != null) setShoulderCm(String(data.shoulder_cm));
+          }
+        } catch {}
+      }
+    };
+
+    loadProfile();
   }, [user, isDemo]);
 
   const parseOptional = (val: string): number | undefined => {
     const n = parseFloat(val);
     return Number.isFinite(n) && n > 0 ? n : undefined;
+  };
+
+  const stepValue = (val: string, delta: number, setter: (next: string) => void) => {
+    const current = parseFloat(val) || 0;
+    const next = Math.max(1, current + delta);
+    setter(String(next));
+  };
+
+  const handleSaveBodyOnly = async () => {
+    const chest = parseFloat(chestCm);
+    if (!Number.isFinite(chest) || chest <= 0) {
+      Alert.alert(
+        'Input Wajib',
+        'Lingkar dada tubuh wajib diisi angka lebih dari 0 untuk disimpan.'
+      );
+      return;
+    }
+
+    setSavingBody(true);
+    const bodyData = {
+      chest_cm: chest,
+      height_cm: parseOptional(heightCm) ?? null,
+      weight_kg: parseOptional(weightKg) ?? null,
+      waist_cm: parseOptional(waistCm) ?? null,
+      shoulder_cm: parseOptional(shoulderCm) ?? null,
+      updated_at: new Date().toISOString(),
+    };
+
+    try {
+      if (user && !isDemo && isSupabaseConfigured) {
+        const { error } = await supabase.from('profiles').upsert({
+          id: user.id,
+          ...bodyData,
+        });
+        if (error) throw error;
+      }
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(bodyData));
+      Alert.alert('Tersimpan', 'Ukuran tubuh berhasil disimpan sebagai profil default Anda.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Gagal menyimpan profil';
+      Alert.alert('Gagal', message);
+    } finally {
+      setSavingBody(false);
+    }
   };
 
   const handleCalculate = async () => {
@@ -99,16 +170,40 @@ export default function SizeInputScreen({ route, navigation }: Props) {
     };
 
     const fitResult = calculateFit(body, garment);
+    const tryOnPrompt = buildTryOnPrompt(fitResult);
     let createdJobId: string | undefined;
+    let resultImageUri: string | undefined;
 
     setSubmitting(true);
     try {
+      AsyncStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          chest_cm: body.chest,
+          height_cm: body.height ?? null,
+          weight_kg: body.weight ?? null,
+          waist_cm: body.waist ?? null,
+          shoulder_cm: body.shoulder ?? null,
+        })
+      ).catch(() => {});
+
       if (user && !isDemo && isSupabaseConfigured) {
         const ts = Date.now();
         const personImagePath = `${user.id}/person-${ts}.jpg`;
         const garmentImagePath = `${user.id}/garment-${ts}.jpg`;
 
-        // 1. Upsert ukuran tubuh ke profiles
+        const uploadPhoto = async (uri: string, storagePath: string) => {
+          const res = await fetch(uri);
+          const blob = await res.blob();
+          await supabase.storage
+            .from('tryon-photos')
+            .upload(storagePath, blob, { contentType: 'image/jpeg', upsert: true });
+        };
+        await Promise.all([
+          uploadPhoto(personPhotoUri, personImagePath),
+          uploadPhoto(garmentPhotoUri, garmentImagePath),
+        ]).catch(() => {});
+
         await supabase.from('profiles').upsert({
           id: user.id,
           chest_cm: body.chest,
@@ -119,7 +214,6 @@ export default function SizeInputScreen({ route, navigation }: Props) {
           updated_at: new Date().toISOString(),
         });
 
-        // 2. Simpan data kaos ke garments
         await supabase.from('garments').insert({
           user_id: user.id,
           chest_width_cm: garment.chest_width,
@@ -130,7 +224,6 @@ export default function SizeInputScreen({ route, navigation }: Props) {
           image_path: garmentImagePath,
         });
 
-        // 3. Buat antrean job try-on asinkron
         const { data: jobData } = await supabase
           .from('tryon_jobs')
           .insert({
@@ -144,7 +237,6 @@ export default function SizeInputScreen({ route, navigation }: Props) {
 
         createdJobId = jobData?.id;
 
-        // 4. Simpan hasil perhitungan estimator ke fit_results
         await supabase.from('fit_results').insert({
           job_id: createdJobId ?? null,
           user_id: user.id,
@@ -153,21 +245,25 @@ export default function SizeInputScreen({ route, navigation }: Props) {
           warnings: fitResult.warnings,
         });
 
-        // 5. Panggil Edge Function secara asinkron di latar belakang
         if (createdJobId) {
-          supabase.functions
+          const { data: fnData } = await supabase.functions
             .invoke('process-tryon', {
               body: {
                 job_id: createdJobId,
                 person_image_path: personImagePath,
                 garment_image_path: garmentImagePath,
+                prompt: tryOnPrompt,
               },
             })
-            .catch(() => {});
+            .catch(() => ({ data: null }));
+
+          if (!resultImageUri && fnData?.result_url) {
+            resultImageUri = fnData.result_url;
+          }
         }
       }
     } catch {
-      // Tetap lanjutkan ke layar hasil meski koneksi/penyimpanan gagal
+      // Tetap lanjutkan ke layar hasil meski koneksi gagal
     } finally {
       setSubmitting(false);
     }
@@ -178,240 +274,315 @@ export default function SizeInputScreen({ route, navigation }: Props) {
       body,
       garment,
       fitResult,
+      resultImageUri,
       jobId: createdJobId,
     });
   };
 
+  const renderSpecRow = (
+    label: string,
+    unit: string,
+    val: string,
+    setter: (next: string) => void
+  ) => (
+    <View style={styles.specRow} key={label}>
+      <Text style={styles.specName}>{label}</Text>
+      <Text style={styles.specUnit}>{unit}</Text>
+      <TextInput
+        style={styles.specInput}
+        keyboardType="numeric"
+        value={val}
+        onChangeText={setter}
+      />
+      <View style={styles.stepperPill}>
+        <TouchableOpacity
+          style={styles.stepBtn}
+          onPress={() => stepValue(val, -1, setter)}
+        >
+          <Text style={styles.stepBtnText}>-</Text>
+        </TouchableOpacity>
+        <Text style={styles.stepValueText}>{val || '0'}</Text>
+        <TouchableOpacity
+          style={styles.stepBtn}
+          onPress={() => stepValue(val, 1, setter)}
+        >
+          <Text style={styles.stepBtnText}>+</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Ukuran Tubuh Pengguna</Text>
-        <Text style={styles.sectionHint}>
-          Gunakan ukuran lingkar tubuh (cm).
-        </Text>
+      <Text style={styles.heading}>Ukuran Tubuh & Kaos</Text>
+      <Text style={styles.subheading}>
+        Sesuaikan ukuran lingkar tubuh Anda dan lebar datar kaos dari size chart toko.
+      </Text>
 
-        <Text style={styles.label}>Lingkar Dada (cm) *</Text>
-        <TextInput
-          style={styles.input}
-          keyboardType="numeric"
-          value={chestCm}
-          onChangeText={setChestCm}
-          placeholder="Contoh: 96"
-        />
-
-        <View style={styles.row}>
-          <View style={styles.col}>
-            <Text style={styles.label}>Lebar Bahu (cm)</Text>
-            <TextInput
-              style={styles.input}
-              keyboardType="numeric"
-              value={shoulderCm}
-              onChangeText={setShoulderCm}
-              placeholder="Contoh: 44"
-            />
-          </View>
-          <View style={styles.col}>
-            <Text style={styles.label}>Lingkar Pinggang (cm)</Text>
-            <TextInput
-              style={styles.input}
-              keyboardType="numeric"
-              value={waistCm}
-              onChangeText={setWaistCm}
-              placeholder="Contoh: 82"
-            />
-          </View>
-        </View>
-
-        <View style={styles.row}>
-          <View style={styles.col}>
-            <Text style={styles.label}>Tinggi Badan (cm)</Text>
-            <TextInput
-              style={styles.input}
-              keyboardType="numeric"
-              value={heightCm}
-              onChangeText={setHeightCm}
-              placeholder="Contoh: 172"
-            />
-          </View>
-          <View style={styles.col}>
-            <Text style={styles.label}>Berat Badan (kg)</Text>
-            <TextInput
-              style={styles.input}
-              keyboardType="numeric"
-              value={weightKg}
-              onChangeText={setWeightKg}
-              placeholder="Contoh: 68"
-            />
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Ukuran Kaos (Atasan)</Text>
-        <Text style={styles.sectionHint}>
-          Masukkan lebar datar (flat width) sesuai size chart kaos.
-        </Text>
-
-        <Text style={styles.label}>Lebar Dada Kaos Datar (cm) *</Text>
-        <TextInput
-          style={styles.input}
-          keyboardType="numeric"
-          value={chestWidthCm}
-          onChangeText={setChestWidthCm}
-          placeholder="Contoh: 52"
-        />
-
-        <View style={styles.row}>
-          <View style={styles.col}>
-            <Text style={styles.label}>Lebar Bahu Kaos (cm)</Text>
-            <TextInput
-              style={styles.input}
-              keyboardType="numeric"
-              value={garmentShoulderCm}
-              onChangeText={setGarmentShoulderCm}
-              placeholder="Contoh: 45"
-            />
-          </View>
-          <View style={styles.col}>
-            <Text style={styles.label}>Lebar Bawah Datar (cm)</Text>
-            <TextInput
-              style={styles.input}
-              keyboardType="numeric"
-              value={hemWidthCm}
-              onChangeText={setHemWidthCm}
-              placeholder="Contoh: 52"
-            />
-          </View>
-        </View>
-
-        <Text style={styles.label}>Panjang Kaos (cm)</Text>
-        <TextInput
-          style={styles.input}
-          keyboardType="numeric"
-          value={lengthCm}
-          onChangeText={setLengthCm}
-          placeholder="Contoh: 70"
-        />
-
-        <Text style={styles.label}>Kelenturan Bahan (Stretch Type)</Text>
-        <View style={styles.stretchRow}>
-          {STRETCH_OPTIONS.map((opt) => {
-            const active = stretchType === opt.value;
-            return (
-              <TouchableOpacity
-                key={opt.value}
-                style={[styles.stretchChip, active && styles.stretchChipActive]}
-                onPress={() => setStretchType(opt.value)}
-              >
-                <Text
-                  style={[styles.stretchChipText, active && styles.stretchChipTextActive]}
-                >
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+      <Text style={styles.groupTitle}>Profil Tubuh Anda</Text>
+      <View style={styles.specTable}>
+        {renderSpecRow('Lingkar Dada *', 'cm', chestCm, setChestCm)}
+        {renderSpecRow('Lebar Bahu', 'cm', shoulderCm, setShoulderCm)}
+        {renderSpecRow('Lingkar Pinggang', 'cm', waistCm, setWaistCm)}
+        {renderSpecRow('Tinggi Badan', 'cm', heightCm, setHeightCm)}
+        {renderSpecRow('Berat Badan', 'kg', weightKg, setWeightKg)}
       </View>
 
       <TouchableOpacity
-        style={styles.primaryBtn}
-        disabled={submitting}
-        onPress={handleCalculate}
+        style={styles.saveProfilePill}
+        onPress={handleSaveBodyOnly}
+        disabled={savingBody}
       >
-        {submitting ? (
-          <ActivityIndicator color="#FFFFFF" />
+        {savingBody ? (
+          <ActivityIndicator size="small" color={theme.colors.cobalt} />
         ) : (
-          <Text style={styles.primaryBtnText}>Hitung Estimasi & Proses Try-On</Text>
+          <Text style={styles.saveProfilePillText}>Simpan Ukuran ke Profil</Text>
         )}
       </TouchableOpacity>
+
+      <Text style={styles.groupTitle}>Size Chart Kaos (Datar)</Text>
+      <View style={styles.specTable}>
+        {renderSpecRow('Lebar Dada *', 'cm', chestWidthCm, setChestWidthCm)}
+        {renderSpecRow('Lebar Bahu', 'cm', garmentShoulderCm, setGarmentShoulderCm)}
+        {renderSpecRow('Lebar Bawah', 'cm', hemWidthCm, setHemWidthCm)}
+        {renderSpecRow('Panjang Kaos', 'cm', lengthCm, setLengthCm)}
+      </View>
+
+      <Text style={styles.groupTitle}>Karakter Bahan</Text>
+      <View style={styles.stretchRow}>
+        {STRETCH_OPTIONS.map((opt) => {
+          const active = stretchType === opt.value;
+          return (
+            <TouchableOpacity
+              key={opt.value}
+              style={[styles.stretchPill, active && styles.stretchPillActive]}
+              onPress={() => setStretchType(opt.value)}
+            >
+              <Text
+                style={[
+                  styles.stretchPillText,
+                  active && styles.stretchPillTextActive,
+                ]}
+              >
+                {opt.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <View style={styles.progressTrack}>
+        <View style={styles.progressDot} />
+        <View style={styles.progressBarActive} />
+        <View style={styles.progressDot} />
+      </View>
+
+      <View style={styles.bottomBar}>
+        <TouchableOpacity
+          style={styles.backLink}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backLinkText}>Kembali</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.submitPill}
+          disabled={submitting}
+          onPress={handleCalculate}
+        >
+          {submitting ? (
+            <ActivityIndicator color={theme.colors.paper} />
+          ) : (
+            <Text style={styles.submitPillText}>Proses Try-On</Text>
+          )}
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    padding: 20,
-    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 22,
+    paddingTop: 12,
+    paddingBottom: 40,
+    backgroundColor: theme.colors.cream,
   },
-  section: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+  heading: {
+    fontFamily: theme.fonts.display,
+    fontSize: 26,
+    fontWeight: '700',
+    color: theme.colors.ink,
+    letterSpacing: 0.2,
   },
-  sectionTitle: {
+  subheading: {
+    fontFamily: theme.fonts.sans,
+    fontSize: 14,
+    fontWeight: '500',
+    color: theme.colors.muted,
+    marginTop: 6,
+    lineHeight: 22,
+    marginBottom: 18,
+  },
+  groupTitle: {
+    fontFamily: theme.fonts.display,
     fontSize: 17,
     fontWeight: '700',
-    color: '#0F172A',
+    color: theme.colors.ink,
+    marginBottom: 8,
+    marginTop: 6,
+    letterSpacing: 0.2,
   },
-  sectionHint: {
+  specTable: {
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.line,
+    marginBottom: 12,
+  },
+  specRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.line,
+  },
+  specName: {
+    flex: 1.3,
+    fontFamily: theme.fonts.sans,
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.ink,
+  },
+  specUnit: {
+    width: 34,
+    fontFamily: theme.fonts.mono,
     fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
-    marginBottom: 14,
+    color: theme.colors.muted,
   },
-  label: {
+  specInput: {
+    width: 54,
+    backgroundColor: theme.colors.sand,
+    borderRadius: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    fontFamily: theme.fonts.mono,
     fontSize: 13,
     fontWeight: '600',
-    color: '#334155',
-    marginBottom: 6,
+    color: theme.colors.ink,
+    textAlign: 'center',
+    marginRight: 10,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    marginBottom: 12,
-    backgroundColor: '#F8FAFC',
-  },
-  row: {
+  stepperPill: {
     flexDirection: 'row',
-    gap: 12,
+    alignItems: 'center',
+    backgroundColor: theme.colors.cobalt,
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    minWidth: 86,
+    justifyContent: 'space-between',
   },
-  col: {
-    flex: 1,
+  stepBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  stepBtnText: {
+    fontFamily: theme.fonts.mono,
+    color: theme.colors.paper,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  stepValueText: {
+    fontFamily: theme.fonts.mono,
+    color: theme.colors.paper,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  saveProfilePill: {
+    alignSelf: 'flex-start',
+    borderWidth: 1.2,
+    borderColor: theme.colors.cobalt,
+    borderRadius: theme.radius.pill,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    marginBottom: 18,
+  },
+  saveProfilePillText: {
+    fontFamily: theme.fonts.sans,
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.colors.cobalt,
   },
   stretchRow: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 4,
+    marginBottom: 24,
   },
-  stretchChip: {
+  stretchPill: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 10,
-    paddingVertical: 10,
+    borderWidth: 1.2,
+    borderColor: theme.colors.cobalt,
+    borderRadius: theme.radius.pill,
+    paddingVertical: 9,
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
   },
-  stretchChipActive: {
-    borderColor: '#2563EB',
-    backgroundColor: '#EFF6FF',
+  stretchPillActive: {
+    backgroundColor: theme.colors.cobalt,
   },
-  stretchChipText: {
+  stretchPillText: {
+    fontFamily: theme.fonts.sans,
     fontSize: 13,
-    color: '#475569',
     fontWeight: '600',
+    color: theme.colors.cobalt,
   },
-  stretchChipTextActive: {
-    color: '#2563EB',
+  stretchPillTextActive: {
+    color: theme.colors.paper,
   },
-  primaryBtn: {
-    backgroundColor: '#2563EB',
-    borderRadius: 12,
-    paddingVertical: 15,
+  progressTrack: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 32,
+    gap: 6,
+    marginBottom: 22,
   },
-  primaryBtnText: {
-    color: '#FFFFFF',
+  progressBarActive: {
+    width: 34,
+    height: 5,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.ink,
+  },
+  progressDot: {
+    width: 6,
+    height: 6,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.line,
+  },
+  bottomBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  backLink: {
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+  },
+  backLinkText: {
+    fontFamily: theme.fonts.sans,
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.ink,
+  },
+  submitPill: {
+    backgroundColor: theme.colors.cobalt,
+    borderRadius: theme.radius.pill,
+    paddingVertical: 14,
+    paddingHorizontal: 26,
+    minWidth: 160,
+    alignItems: 'center',
+  },
+  submitPillText: {
+    fontFamily: theme.fonts.sans,
+    color: theme.colors.paper,
+    fontSize: 14,
     fontWeight: '700',
-    fontSize: 15,
   },
 });
