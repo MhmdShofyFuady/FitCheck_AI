@@ -1,16 +1,27 @@
 import React, { useState } from 'react';
 import {
+  Alert,
   Image,
   Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import {
+  ArrowLeft,
+  ChevronDown,
+  EllipsisVertical,
+  SlidersHorizontal,
+  X,
+} from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TryOnStackParamList } from '../navigation/types';
 import { FitLabel, StretchType } from '../utils/estimator';
+import { CircleButton, Pill, TopBar } from '../components/ui';
 import { theme } from '../theme';
 
 type Props = NativeStackScreenProps<TryOnStackParamList, 'Result'>;
@@ -22,29 +33,27 @@ const FIT_VERDICT: Record<
   snug: {
     title: 'Snug Fit (Ketat)',
     subtitle: 'Kaos menempel mengikuti lekuk dada dengan ruang minimal.',
-    tag: 'Body Fit',
+    tag: 'Snug Fit',
   },
   regular: {
     title: 'Regular Fit (Pas Ideal)',
     subtitle: 'Kelonggaran dada seimbang dan nyaman untuk bergerak harian.',
-    tag: 'Ideal',
+    tag: 'Regular Fit',
   },
   loose: {
     title: 'Loose Fit (Oversized)',
     subtitle: 'Ruang ekstra lega di area dada dengan siluet santai.',
-    tag: 'Relaxed',
+    tag: 'Loose Fit',
   },
 };
 
 const STRETCH_BADGE: Record<StretchType, string> = {
   kaku: 'Kaku',
-  sedikit_stretch: 'Semi',
+  sedikit_stretch: 'Semi Stretch',
   stretch: 'Stretch',
 };
 
-const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 2.5;
-const ZOOM_STEP = 0.25;
+const ZOOM_STEPS = [0.75, 1, 1.25, 1.5, 2];
 
 export default function ResultScreen({ route, navigation }: Props) {
   const {
@@ -54,569 +63,441 @@ export default function ResultScreen({ route, navigation }: Props) {
     garment,
     fitResult,
     resultImageUri,
-    jobId,
   } = route.params;
 
+  const insets = useSafeAreaInsets();
   const verdict = FIT_VERDICT[fitResult.fit_label];
-  const [zoom, setZoom] = useState(1);
-  const [fullscreen, setFullscreen] = useState(false);
 
-  const adjustZoom = (delta: number) => {
-    setZoom((prev) => {
-      const next = Math.round((prev + delta) * 100) / 100;
-      return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
-    });
+  const primaryUri = resultImageUri ?? personPhotoUri;
+  const [selectedSlot, setSelectedSlot] = useState<'result' | 'person' | 'garment'>('result');
+  const [zoomIndex, setZoomIndex] = useState(1);
+  const [showFitSheet, setShowFitSheet] = useState(false);
+
+  const zoom = ZOOM_STEPS[zoomIndex] ?? 1;
+  const activeImageUri =
+    selectedSlot === 'result'
+      ? primaryUri
+      : selectedSlot === 'person'
+        ? personPhotoUri
+        : garmentPhotoUri;
+
+  const cycleZoom = () => {
+    setZoomIndex((prev) => (prev + 1) % ZOOM_STEPS.length);
   };
 
-  const activeImageUri = resultImageUri ?? personPhotoUri;
-  const zoomPercent = `${Math.round(zoom * 100)}%`;
+  const easePrefix = fitResult.chest_ease_cm >= 0 ? '+' : '';
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.heading}>{verdict.title}</Text>
-      <Text style={styles.subheading}>{verdict.subtitle}</Text>
+    <View style={styles.screen}>
+      <ScrollView
+        contentContainerStyle={styles.stageScroll}
+        maximumZoomScale={2.5}
+        minimumZoomScale={0.5}
+        showsHorizontalScrollIndicator={false}
+        showsVerticalScrollIndicator={false}
+        centerContent
+      >
+        <Image
+          source={{ uri: activeImageUri }}
+          style={[styles.stageImage, { transform: [{ scale: zoom }] }]}
+          resizeMode="cover"
+        />
+      </ScrollView>
 
-      <View style={styles.specTable}>
-        <View style={styles.specRow}>
-          <Text style={styles.specName}>Kelonggaran Dada</Text>
-          <Text style={styles.specMeta}>2x Lebar - Dada</Text>
-          <Text style={styles.specVal}>{fitResult.chest_ease_cm} cm</Text>
-          <View style={styles.pillBadge}>
-            <Text style={styles.pillBadgeText} numberOfLines={1}>
-              {verdict.tag}
-            </Text>
-          </View>
-        </View>
+      <LinearGradient
+        colors={['rgba(218, 218, 220, 0)', theme.colors.stage]}
+        locations={[0, 0.58]}
+        pointerEvents="none"
+        style={styles.bottomFade}
+      />
 
-        <View style={styles.specRow}>
-          <Text style={styles.specName}>Lingkar Kaos</Text>
-          <Text style={styles.specMeta}>Datar {garment.chest_width} cm</Text>
-          <Text style={styles.specVal}>{2 * garment.chest_width} cm</Text>
-          <View style={styles.pillBadge}>
-            <Text style={styles.pillBadgeText} numberOfLines={1}>
-              {STRETCH_BADGE[garment.stretch_type]}
-            </Text>
-          </View>
-        </View>
+      <TopBar
+        overlay
+        title="Model"
+        left={
+          <CircleButton
+            icon={ArrowLeft}
+            accessibilityLabel="Kembali"
+            onPress={() => navigation.goBack()}
+          />
+        }
+        right={
+          <CircleButton
+            icon={EllipsisVertical}
+            accessibilityLabel="Detail Ukuran"
+            onPress={() => setShowFitSheet(true)}
+          />
+        }
+      />
 
-        <View style={styles.specRow}>
-          <Text style={styles.specName}>Lingkar Dada Anda</Text>
-          <Text style={styles.specMeta}>Ukuran profil</Text>
-          <Text style={styles.specVal}>{body.chest} cm</Text>
-          <View style={styles.pillBadge}>
-            <Text style={styles.pillBadgeText} numberOfLines={1}>
-              Tubuh
-            </Text>
-          </View>
-        </View>
+      <View style={styles.garmentPinLeft}>
+        <Image source={{ uri: garmentPhotoUri }} style={styles.pinThumb} />
+        <Pressable
+          hitSlop={10}
+          onPress={() => navigation.popToTop()}
+          style={styles.pinRemove}
+          accessibilityLabel="Ganti kaos"
+        >
+          <X size={11} strokeWidth={3} color={theme.colors.onInk} />
+        </Pressable>
       </View>
 
-      {fitResult.warnings.length > 0 && (
-        <View style={styles.noteBox}>
-          {fitResult.warnings.map((w) => (
-            <Text key={w} style={styles.noteText}>
-              Catatan proporsi: {w}
-            </Text>
-          ))}
+      <Pressable
+        onPress={() => setShowFitSheet(true)}
+        style={styles.fitPinRight}
+      >
+        <Text style={styles.fitPinVal}>
+          {easePrefix}
+          {fitResult.chest_ease_cm} cm
+        </Text>
+        <Text style={styles.fitPinSub}>{verdict.tag}</Text>
+      </Pressable>
+
+      <View
+        style={[
+          styles.bottomPanel,
+          { paddingBottom: Math.max(insets.bottom + 10, 22) },
+        ]}
+      >
+        <View style={styles.controlsRow}>
+          <Pill
+            label={`${verdict.tag} · ${easePrefix}${fitResult.chest_ease_cm} cm`}
+            icon={SlidersHorizontal}
+            onPress={() => setShowFitSheet(true)}
+          />
+          <Pill
+            label={`Skala ${Math.round(zoom * 100)}%`}
+            icon={ChevronDown}
+            onPress={cycleZoom}
+          />
         </View>
-      )}
 
-      <View style={styles.tryOnHeaderBlock}>
-        <View style={styles.tryOnTitleRow}>
-          <Text style={styles.zoomLabel}>
-            {resultImageUri
-              ? 'Hasil AI Try-On'
-              : jobId
-                ? 'Pratinjau Try-On'
-                : 'Pratinjau Mode Demo'}
-          </Text>
-          <TouchableOpacity
-            style={styles.fullscreenPill}
-            onPress={() => setFullscreen(true)}
-          >
-            <Text style={styles.fullscreenPillText}>Layar Penuh</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.zoomToolbar}>
-          <Text style={styles.zoomHintLabel}>Kontrol Skala Gambar</Text>
-          <View style={styles.zoomControls}>
-            <TouchableOpacity
-              style={styles.resetPill}
-              onPress={() => setZoom(1)}
-            >
-              <Text style={styles.resetPillText}>1:1</Text>
-            </TouchableOpacity>
-
-            <View style={styles.stepperPill}>
-              <TouchableOpacity
-                style={styles.stepBtn}
-                onPress={() => adjustZoom(-ZOOM_STEP)}
-              >
-                <Text style={styles.stepBtnText}>-</Text>
-              </TouchableOpacity>
-              <Text style={styles.stepVal}>{zoomPercent}</Text>
-              <TouchableOpacity
-                style={styles.stepBtn}
-                onPress={() => adjustZoom(ZOOM_STEP)}
-              >
-                <Text style={styles.stepBtnText}>+</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.stageFrame}>
         <ScrollView
           horizontal
-          contentContainerStyle={styles.stageScrollContent}
           showsHorizontalScrollIndicator={false}
-          showsVerticalScrollIndicator={false}
-          maximumZoomScale={MAX_ZOOM}
-          minimumZoomScale={MIN_ZOOM}
+          contentContainerStyle={styles.carousel}
         >
-          <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() => setFullscreen(true)}
-            style={styles.stageImageWrap}
-          >
-            <Image
-              source={{ uri: activeImageUri }}
-              style={[
-                styles.stageImage,
-                { transform: [{ scale: zoom }] },
-              ]}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
+          {[
+            { key: 'result' as const, uri: primaryUri, label: 'Hasil AI' },
+            { key: 'person' as const, uri: personPhotoUri, label: 'Tubuh' },
+            { key: 'garment' as const, uri: garmentPhotoUri, label: 'Kaos' },
+          ].map((slot) => {
+            const active = selectedSlot === slot.key;
+            return (
+              <Pressable
+                key={slot.key}
+                onPress={() => setSelectedSlot(slot.key)}
+                style={[styles.tile, active && styles.tileSelected]}
+              >
+                <Image
+                  source={{ uri: slot.uri }}
+                  style={[styles.tileImage, !active && styles.tileImageMuted]}
+                  resizeMode="cover"
+                />
+              </Pressable>
+            );
+          })}
         </ScrollView>
 
-        <View style={styles.garmentThumbCard}>
-          <Image
-            source={{ uri: garmentPhotoUri }}
-            style={styles.garmentThumb}
-          />
-          <Text style={styles.garmentThumbText}>Kaos</Text>
-        </View>
-      </View>
-
-      <View style={styles.hintBox}>
-        <Text style={styles.hintText}>
-          Gunakan tombol - dan + untuk zoom out (50%) hingga zoom in (250%), atau ketuk gambar untuk mode layar penuh.
-        </Text>
-      </View>
-
-      <View style={styles.progressTrack}>
-        <View style={styles.progressDot} />
-        <View style={styles.progressDot} />
-        <View style={styles.progressBarActive} />
-      </View>
-
-      <View style={styles.bottomBar}>
-        <TouchableOpacity
-          style={styles.backLink}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backLinkText}>Ubah Ukuran</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.nextPill}
-          onPress={() => navigation.popToTop()}
-        >
-          <Text style={styles.nextPillText}>Coba Kaos Lain</Text>
-        </TouchableOpacity>
+        <Pill
+          variant="primary"
+          label="Simpan ke koleksi"
+          style={styles.saveCollectionBtn}
+          onPress={() => {
+            Alert.alert(
+              'Tersimpan di Lemari',
+              'Hasil try-on dan spesifikasi kaos telah tersimpan di tab Lemari.',
+              [
+                {
+                  text: 'Coba Kaos Lain',
+                  onPress: () => navigation.popToTop(),
+                },
+                { text: 'Tutup', style: 'cancel' },
+              ]
+            );
+          }}
+        />
       </View>
 
       <Modal
-        visible={fullscreen}
+        visible={showFitSheet}
         transparent
-        animationType="fade"
-        onRequestClose={() => setFullscreen(false)}
+        animationType="slide"
+        onRequestClose={() => setShowFitSheet(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalTopBar}>
-            <View style={styles.stepperPill}>
-              <TouchableOpacity
-                style={styles.stepBtn}
-                onPress={() => adjustZoom(-ZOOM_STEP)}
-              >
-                <Text style={styles.stepBtnText}>-</Text>
-              </TouchableOpacity>
-              <Text style={styles.stepVal}>{zoomPercent}</Text>
-              <TouchableOpacity
-                style={styles.stepBtn}
-                onPress={() => adjustZoom(ZOOM_STEP)}
-              >
-                <Text style={styles.stepBtnText}>+</Text>
-              </TouchableOpacity>
+        <Pressable
+          style={styles.sheetBackdrop}
+          onPress={() => setShowFitSheet(false)}
+        >
+          <Pressable style={styles.sheetCard} onPress={() => {}}>
+            <View style={styles.sheetHeader}>
+              <View>
+                <Text style={styles.sheetTitle}>{verdict.title}</Text>
+                <Text style={styles.sheetSubtitle}>{verdict.subtitle}</Text>
+              </View>
+              <CircleButton
+                icon={X}
+                accessibilityLabel="Tutup"
+                onPress={() => setShowFitSheet(false)}
+              />
             </View>
 
-            <TouchableOpacity
-              style={styles.modalResetBtn}
-              onPress={() => setZoom(1)}
-            >
-              <Text style={styles.modalResetText}>Reset 100%</Text>
-            </TouchableOpacity>
+            <View style={styles.sheetWell}>
+              <View style={styles.sheetRow}>
+                <Text style={styles.sheetLabel}>Kelonggaran Dada</Text>
+                <Text style={styles.sheetMeta}>2x Lebar − Dada</Text>
+                <Text style={styles.sheetVal}>
+                  {easePrefix}
+                  {fitResult.chest_ease_cm} cm
+                </Text>
+              </View>
+              <View style={styles.hairline} />
+              <View style={styles.sheetRow}>
+                <Text style={styles.sheetLabel}>Lingkar Kaos</Text>
+                <Text style={styles.sheetMeta}>
+                  Datar {garment.chest_width} cm · {STRETCH_BADGE[garment.stretch_type]}
+                </Text>
+                <Text style={styles.sheetVal}>{2 * garment.chest_width} cm</Text>
+              </View>
+              <View style={styles.hairline} />
+              <View style={styles.sheetRow}>
+                <Text style={styles.sheetLabel}>Lingkar Dada Anda</Text>
+                <Text style={styles.sheetMeta}>Ukuran profil</Text>
+                <Text style={styles.sheetVal}>{body.chest} cm</Text>
+              </View>
+            </View>
 
-            <TouchableOpacity
-              style={styles.modalClosePill}
-              onPress={() => setFullscreen(false)}
-            >
-              <Text style={styles.modalCloseText}>Tutup</Text>
-            </TouchableOpacity>
-          </View>
+            {fitResult.warnings.length > 0 ? (
+              <View style={styles.warningBox}>
+                {fitResult.warnings.map((w) => (
+                  <Text key={w} style={styles.warningText}>
+                    Catatan proporsi: {w}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
 
-          <ScrollView
-            contentContainerStyle={styles.modalCanvas}
-            maximumZoomScale={MAX_ZOOM}
-            minimumZoomScale={MIN_ZOOM}
-            centerContent
-          >
-            <Image
-              source={{ uri: activeImageUri }}
-              style={[
-                styles.modalImage,
-                { transform: [{ scale: zoom }] },
-              ]}
-              resizeMode="contain"
-            />
-          </ScrollView>
-        </View>
+            <View style={styles.sheetActions}>
+              <Pill
+                variant="chip"
+                label="Ubah ukuran"
+                onPress={() => {
+                  setShowFitSheet(false);
+                  navigation.goBack();
+                }}
+                style={styles.sheetBtn}
+              />
+              <Pill
+                variant="primary"
+                label="Coba kaos lain"
+                onPress={() => {
+                  setShowFitSheet(false);
+                  navigation.popToTop();
+                }}
+                style={styles.sheetBtn}
+              />
+            </View>
+          </Pressable>
+        </Pressable>
       </Modal>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 22,
-    paddingTop: 12,
-    paddingBottom: 40,
-    backgroundColor: theme.colors.cream,
-  },
-  heading: {
-    fontFamily: theme.fonts.display,
-    fontSize: 26,
-    fontWeight: '700',
-    color: theme.colors.ink,
-    letterSpacing: 0.2,
-  },
-  subheading: {
-    fontFamily: theme.fonts.sans,
-    fontSize: 14,
-    fontWeight: '500',
-    color: theme.colors.muted,
-    marginTop: 6,
-    lineHeight: 22,
-    marginBottom: 20,
-  },
-  specTable: {
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.line,
-    marginBottom: 22,
-  },
-  specRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.line,
-  },
-  specName: {
-    flex: 1.25,
-    fontFamily: theme.fonts.sans,
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.ink,
-    lineHeight: 20,
-  },
-  specMeta: {
+  screen: {
     flex: 1,
-    fontFamily: theme.fonts.mono,
-    fontSize: 12,
-    color: theme.colors.muted,
-    lineHeight: 18,
+    backgroundColor: theme.colors.stage,
   },
-  specVal: {
-    width: 68,
-    fontFamily: theme.fonts.mono,
-    fontSize: 13,
-    fontWeight: '600',
-    color: theme.colors.ink,
-    textAlign: 'right',
-    marginRight: 12,
+  stageScroll: {
+    flexGrow: 1,
   },
-  pillBadge: {
-    width: 86,
-    height: 32,
-    backgroundColor: theme.colors.cobalt,
-    borderRadius: theme.radius.pill,
+  stageImage: {
+    width: '100%',
+    height: '100%',
+  },
+  bottomFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 360,
+  },
+  garmentPinLeft: {
+    position: 'absolute',
+    top: '30%',
+    left: '15%',
+    padding: 4,
+    borderRadius: 12,
+    backgroundColor: theme.colors.card,
+    ...theme.shadow,
+  },
+  pinThumb: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+  },
+  pinRemove: {
+    position: 'absolute',
+    top: -7,
+    left: -7,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: theme.colors.danger,
+  },
+  fitPinRight: {
+    position: 'absolute',
+    top: '50%',
+    right: '12%',
     paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: theme.colors.card,
+    alignItems: 'center',
+    ...theme.shadow,
   },
-  pillBadgeText: {
-    fontFamily: theme.fonts.sans,
-    color: theme.colors.paper,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
-  noteBox: {
-    backgroundColor: theme.colors.amberBg,
-    borderRadius: theme.radius.input,
-    padding: 13,
-    marginBottom: 18,
-  },
-  noteText: {
-    fontFamily: theme.fonts.sans,
+  fitPinVal: {
+    fontFamily: theme.font,
     fontSize: 13,
-    fontWeight: '600',
-    color: theme.colors.amberInk,
-    lineHeight: 19,
+    fontWeight: '700',
+    color: theme.colors.ink,
+    fontVariant: ['tabular-nums'],
   },
-  tryOnHeaderBlock: {
-    marginTop: 6,
-    marginBottom: 16,
+  fitPinSub: {
+    fontFamily: theme.font,
+    fontSize: 10,
+    fontWeight: '500',
+    color: theme.colors.muted,
+  },
+  bottomPanel: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     gap: 12,
   },
-  tryOnTitleRow: {
+  controlsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 16,
   },
-  zoomLabel: {
-    fontFamily: theme.fonts.display,
+  carousel: {
+    gap: 10,
+    paddingHorizontal: 16,
+  },
+  tile: {
+    width: 104,
+    height: 112,
+    borderRadius: theme.radius.tile,
+    overflow: 'hidden',
+    backgroundColor: theme.colors.glass,
+    borderWidth: 2.5,
+    borderColor: 'transparent',
+  },
+  tileSelected: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.card,
+    ...theme.shadow,
+  },
+  tileImage: {
+    width: '100%',
+    height: '100%',
+  },
+  tileImageMuted: {
+    opacity: 0.65,
+  },
+  saveCollectionBtn: {
+    marginHorizontal: 16,
+  },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    justifyContent: 'flex-end',
+  },
+  sheetCard: {
+    backgroundColor: theme.colors.card,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 20,
+    paddingBottom: 34,
+    gap: 16,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  sheetTitle: {
+    fontFamily: theme.font,
     fontSize: 20,
     fontWeight: '700',
     color: theme.colors.ink,
-    letterSpacing: 0.2,
+    letterSpacing: -0.3,
   },
-  fullscreenPill: {
-    borderWidth: 1.2,
-    borderColor: theme.colors.cobalt,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+  sheetSubtitle: {
+    fontFamily: theme.font,
+    fontSize: 13,
+    color: theme.colors.muted,
+    marginTop: 3,
+    maxWidth: 260,
   },
-  fullscreenPillText: {
-    fontFamily: theme.fonts.sans,
-    fontSize: 12,
-    fontWeight: '600',
-    color: theme.colors.cobalt,
+  sheetWell: {
+    backgroundColor: theme.colors.well,
+    borderRadius: theme.radius.tile,
+    overflow: 'hidden',
   },
-  zoomToolbar: {
+  sheetRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: theme.colors.sand,
-    borderRadius: theme.radius.input,
+    paddingVertical: 13,
     paddingHorizontal: 14,
-    paddingVertical: 10,
   },
-  zoomHintLabel: {
-    fontFamily: theme.fonts.sans,
+  hairline: {
+    height: 1,
+    backgroundColor: theme.colors.hairline,
+    marginHorizontal: 14,
+  },
+  sheetLabel: {
+    flex: 1.2,
+    fontFamily: theme.font,
+    fontSize: 14,
+    fontWeight: '500',
+    color: theme.colors.ink,
+  },
+  sheetMeta: {
+    flex: 1.2,
+    fontFamily: theme.font,
+    fontSize: 12,
+    color: theme.colors.muted,
+  },
+  sheetVal: {
+    fontFamily: theme.font,
+    fontVariant: ['tabular-nums'],
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.colors.ink,
+  },
+  warningBox: {
+    backgroundColor: theme.colors.warningBg,
+    borderRadius: 14,
+    padding: 12,
+  },
+  warningText: {
+    fontFamily: theme.font,
     fontSize: 13,
     fontWeight: '500',
-    color: theme.colors.muted,
+    color: theme.colors.warningInk,
   },
-  zoomControls: {
+  sheetActions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
-  resetPill: {
-    borderWidth: 1.2,
-    borderColor: theme.colors.cobalt,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    backgroundColor: theme.colors.cream,
-  },
-  resetPillText: {
-    fontFamily: theme.fonts.mono,
-    fontSize: 12,
-    fontWeight: '600',
-    color: theme.colors.cobalt,
-  },
-  stepperPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.cobalt,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    minWidth: 104,
-    justifyContent: 'space-between',
-  },
-  stepBtn: {
-    paddingHorizontal: 6,
-  },
-  stepBtnText: {
-    fontFamily: theme.fonts.mono,
-    color: theme.colors.paper,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  stepVal: {
-    fontFamily: theme.fonts.mono,
-    color: theme.colors.paper,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  stageFrame: {
-    height: 360,
-    borderRadius: theme.radius.card,
-    backgroundColor: theme.colors.sand,
-    overflow: 'hidden',
-    position: 'relative',
-    marginBottom: 14,
-  },
-  stageScrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minWidth: '100%',
-  },
-  stageImageWrap: {
-    width: 320,
-    height: 360,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stageImage: {
-    width: 300,
-    height: 340,
-  },
-  garmentThumbCard: {
-    position: 'absolute',
-    right: 12,
-    top: 12,
-    backgroundColor: theme.colors.paper,
-    borderRadius: 12,
-    padding: 6,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.line,
-  },
-  garmentThumb: {
-    width: 58,
-    height: 58,
-    borderRadius: 8,
-  },
-  garmentThumbText: {
-    fontFamily: theme.fonts.sans,
-    fontSize: 11,
-    fontWeight: '700',
-    color: theme.colors.ink,
-    marginTop: 4,
-  },
-  hintBox: {
-    backgroundColor: theme.colors.sand,
-    borderRadius: theme.radius.input,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    marginBottom: 22,
-  },
-  hintText: {
-    fontFamily: theme.fonts.sans,
-    fontSize: 12,
-    color: theme.colors.muted,
-    lineHeight: 18,
-  },
-  progressTrack: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 22,
-  },
-  progressBarActive: {
-    width: 34,
-    height: 5,
-    borderRadius: theme.radius.pill,
-    backgroundColor: theme.colors.ink,
-  },
-  progressDot: {
-    width: 6,
-    height: 6,
-    borderRadius: theme.radius.pill,
-    backgroundColor: theme.colors.line,
-  },
-  bottomBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  backLink: {
-    paddingVertical: 10,
-    paddingHorizontal: 6,
-  },
-  backLinkText: {
-    fontFamily: theme.fonts.sans,
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.ink,
-  },
-  nextPill: {
-    backgroundColor: theme.colors.cobalt,
-    borderRadius: theme.radius.pill,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-  },
-  nextPillText: {
-    fontFamily: theme.fonts.sans,
-    color: theme.colors.paper,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  modalBackdrop: {
+  sheetBtn: {
     flex: 1,
-    backgroundColor: theme.colors.overlay,
-  },
-  modalTopBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 54,
-    paddingBottom: 14,
-  },
-  modalResetBtn: {
-    borderWidth: 1.2,
-    borderColor: theme.colors.paper,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-  },
-  modalResetText: {
-    fontFamily: theme.fonts.mono,
-    color: theme.colors.paper,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  modalClosePill: {
-    backgroundColor: theme.colors.paper,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-  },
-  modalCloseText: {
-    fontFamily: theme.fonts.sans,
-    color: theme.colors.cobalt,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  modalCanvas: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalImage: {
-    width: 340,
-    height: 460,
   },
 });

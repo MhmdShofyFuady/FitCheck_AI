@@ -1,16 +1,20 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Image,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Camera, ImagePlus, X } from 'lucide-react-native';
 import { TryOnStackParamList } from '../navigation/types';
+import { ClosetGarment, useCloset } from '../hooks/useCloset';
+import { Pill, TopBar, useDockSpace } from '../components/ui';
 import { theme } from '../theme';
 
 type Props = NativeStackScreenProps<TryOnStackParamList, 'PhotoUpload'>;
@@ -20,9 +24,21 @@ const SAMPLE_PERSON_URI =
 const SAMPLE_GARMENT_URI =
   'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=600&auto=format&fit=crop&q=80';
 
-export default function PhotoUploadScreen({ navigation }: Props) {
+export default function PhotoUploadScreen({ navigation, route }: Props) {
   const [personPhotoUri, setPersonPhotoUri] = useState<string | null>(null);
   const [garmentPhotoUri, setGarmentPhotoUri] = useState<string | null>(null);
+  const [garmentPreset, setGarmentPreset] = useState<ClosetGarment | null>(null);
+  const { garments } = useCloset();
+  const dockSpace = useDockSpace();
+
+  // A garment tapped in the Closet arrives here preselected.
+  const incoming = route.params?.garment;
+  useEffect(() => {
+    if (incoming) {
+      setGarmentPreset(incoming);
+      setGarmentPhotoUri(incoming.uri);
+    }
+  }, [incoming]);
 
   const pickImage = async (target: 'person' | 'garment') => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -41,293 +57,239 @@ export default function PhotoUploadScreen({ navigation }: Props) {
       if (target === 'person') {
         setPersonPhotoUri(result.assets[0].uri);
       } else {
+        setGarmentPreset(null);
         setGarmentPhotoUri(result.assets[0].uri);
       }
     }
   };
 
+  const selectClosetGarment = (garment: ClosetGarment) => {
+    setGarmentPreset(garment);
+    setGarmentPhotoUri(garment.uri);
+  };
+
+  const clearGarment = () => {
+    setGarmentPreset(null);
+    setGarmentPhotoUri(null);
+  };
+
   const canProceed = Boolean(personPhotoUri && garmentPhotoUri);
+  const galleryGarmentSelected = Boolean(garmentPhotoUri && !garmentPreset);
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.heading}>Pilih Foto Try-On</Text>
-      <Text style={styles.subheading}>
-        Siapkan satu foto tubuh menghadap depan dan satu foto kaos yang ingin dicoba.
-      </Text>
+    <View style={styles.screen}>
+      {personPhotoUri ? (
+        <Image source={{ uri: personPhotoUri }} style={styles.stageImage} resizeMode="cover" />
+      ) : (
+        <Pressable style={styles.emptyStage} onPress={() => pickImage('person')}>
+          <Camera size={34} strokeWidth={1.8} color={theme.colors.muted} />
+          <Text style={styles.emptyTitle}>Foto tubuh</Text>
+          <Text style={styles.emptySub}>Ketuk untuk memilih, hadap depan</Text>
+        </Pressable>
+      )}
 
-      <View style={styles.specTable}>
-        <View style={styles.specRow}>
-          <Text style={styles.specName}>Foto Tubuh</Text>
-          <Text style={styles.specMeta}>Hadap depan</Text>
-          <Text style={styles.specStatus}>
-            {personPhotoUri ? 'Siap' : 'Kosong'}
-          </Text>
-          <TouchableOpacity
-            style={personPhotoUri ? styles.pillFilled : styles.pillOutline}
+      <LinearGradient
+        colors={['rgba(218, 218, 220, 0)', theme.colors.stage]}
+        locations={[0, 0.55]}
+        pointerEvents="none"
+        style={styles.bottomFade}
+      />
+
+      <TopBar
+        overlay
+        title="Studio"
+        left={
+          <Pill
+            label="Contoh"
+            onPress={() => {
+              setPersonPhotoUri(SAMPLE_PERSON_URI);
+              setGarmentPreset(null);
+              setGarmentPhotoUri(SAMPLE_GARMENT_URI);
+            }}
+          />
+        }
+        right={
+          <Pill
+            label={personPhotoUri ? 'Ganti' : 'Foto'}
+            icon={Camera}
             onPress={() => pickImage('person')}
-          >
-            <Text
-              style={
-                personPhotoUri ? styles.pillFilledText : styles.pillOutlineText
-              }
-            >
-              {personPhotoUri ? 'Ganti' : 'Pilih'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+          />
+        }
+      />
 
-        <View style={styles.specRow}>
-          <Text style={styles.specName}>Foto Kaos</Text>
-          <Text style={styles.specMeta}>Atasan datar</Text>
-          <Text style={styles.specStatus}>
-            {garmentPhotoUri ? 'Siap' : 'Kosong'}
-          </Text>
-          <TouchableOpacity
-            style={garmentPhotoUri ? styles.pillFilled : styles.pillOutline}
+      {garmentPhotoUri ? (
+        <View style={styles.garmentTag}>
+          <Image source={{ uri: garmentPhotoUri }} style={styles.garmentTagImage} />
+          <Pressable
+            hitSlop={10}
+            onPress={clearGarment}
+            style={styles.tagRemove}
+            accessibilityLabel="Hapus kaos"
+          >
+            <X size={11} strokeWidth={3} color={theme.colors.onInk} />
+          </Pressable>
+        </View>
+      ) : null}
+
+      <View style={[styles.bottomPanel, { paddingBottom: dockSpace }]}>
+        <Text style={styles.panelLabel}>Pilih kaos</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.carousel}
+        >
+          <Pressable
             onPress={() => pickImage('garment')}
+            style={[styles.tile, galleryGarmentSelected && styles.tileSelected]}
           >
-            <Text
-              style={
-                garmentPhotoUri ? styles.pillFilledText : styles.pillOutlineText
-              }
-            >
-              {garmentPhotoUri ? 'Ganti' : 'Pilih'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+            {galleryGarmentSelected && garmentPhotoUri ? (
+              <Image source={{ uri: garmentPhotoUri }} style={styles.tileImage} />
+            ) : (
+              <>
+                <ImagePlus size={24} strokeWidth={1.8} color={theme.colors.inkSoft} />
+                <Text style={styles.tileText}>Galeri</Text>
+              </>
+            )}
+          </Pressable>
 
-      <View style={styles.showcaseRow}>
-        <TouchableOpacity
-          style={styles.photoSlot}
-          onPress={() => pickImage('person')}
-          activeOpacity={0.85}
-        >
-          {personPhotoUri ? (
-            <Image source={{ uri: personPhotoUri }} style={styles.photoImage} />
-          ) : (
-            <View style={styles.emptySlot}>
-              <Text style={styles.emptySlotTitle}>Tubuh</Text>
-              <Text style={styles.emptySlotSub}>Ketuk untuk unggah</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+          {garments.map((g) => {
+            const selected = garmentPreset?.id === g.id;
+            return (
+              <Pressable
+                key={g.id}
+                onPress={() => selectClosetGarment(g)}
+                style={[styles.tile, selected && styles.tileSelected]}
+              >
+                <Image source={{ uri: g.uri }} style={styles.tileImage} />
+              </Pressable>
+            );
+          })}
+        </ScrollView>
 
-        <TouchableOpacity
-          style={styles.photoSlot}
-          onPress={() => pickImage('garment')}
-          activeOpacity={0.85}
-        >
-          {garmentPhotoUri ? (
-            <Image source={{ uri: garmentPhotoUri }} style={styles.photoImage} />
-          ) : (
-            <View style={styles.emptySlot}>
-              <Text style={styles.emptySlotTitle}>Kaos</Text>
-              <Text style={styles.emptySlotSub}>Ketuk untuk unggah</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.progressTrack}>
-        <View style={styles.progressBarActive} />
-        <View style={styles.progressDot} />
-        <View style={styles.progressDot} />
-      </View>
-
-      <View style={styles.bottomBar}>
-        <TouchableOpacity
-          style={styles.skipBtn}
-          onPress={() => {
-            setPersonPhotoUri(SAMPLE_PERSON_URI);
-            setGarmentPhotoUri(SAMPLE_GARMENT_URI);
-          }}
-        >
-          <Text style={styles.skipText}>Pakai Contoh</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.nextPill, !canProceed && styles.disabledPill]}
+        <Pill
+          variant="primary"
+          label="Lanjut ukuran"
           disabled={!canProceed}
+          style={styles.primary}
           onPress={() => {
             if (personPhotoUri && garmentPhotoUri) {
-              navigation.navigate('SizeInput', { personPhotoUri, garmentPhotoUri });
+              navigation.navigate('SizeInput', {
+                personPhotoUri,
+                garmentPhotoUri,
+                garmentPreset: garmentPreset ?? undefined,
+              });
             }
           }}
-        >
-          <Text style={styles.nextPillText}>Lanjut Ukuran</Text>
-        </TouchableOpacity>
+        />
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 22,
-    paddingTop: 12,
-    paddingBottom: 36,
-    backgroundColor: theme.colors.cream,
-  },
-  heading: {
-    fontFamily: theme.fonts.display,
-    fontSize: 26,
-    fontWeight: '700',
-    color: theme.colors.ink,
-    letterSpacing: 0.2,
-  },
-  subheading: {
-    fontFamily: theme.fonts.sans,
-    fontSize: 14,
-    fontWeight: '500',
-    color: theme.colors.muted,
-    marginTop: 6,
-    lineHeight: 22,
-    marginBottom: 20,
-  },
-  specTable: {
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.line,
-    marginBottom: 22,
-  },
-  specRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 13,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.line,
-  },
-  specName: {
-    flex: 1.2,
-    fontFamily: theme.fonts.sans,
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.ink,
-  },
-  specMeta: {
-    flex: 1.1,
-    fontFamily: theme.fonts.mono,
-    fontSize: 12,
-    color: theme.colors.muted,
-  },
-  specStatus: {
-    width: 58,
-    fontFamily: theme.fonts.mono,
-    fontSize: 12,
-    fontWeight: '600',
-    color: theme.colors.ink,
-    textAlign: 'right',
-    marginRight: 12,
-  },
-  pillOutline: {
-    width: 82,
-    borderWidth: 1.2,
-    borderColor: theme.colors.cobalt,
-    borderRadius: theme.radius.pill,
-    paddingVertical: 7,
-    alignItems: 'center',
-  },
-  pillOutlineText: {
-    fontFamily: theme.fonts.sans,
-    color: theme.colors.cobalt,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  pillFilled: {
-    width: 82,
-    backgroundColor: theme.colors.cobalt,
-    borderRadius: theme.radius.pill,
-    paddingVertical: 7,
-    alignItems: 'center',
-  },
-  pillFilledText: {
-    fontFamily: theme.fonts.sans,
-    color: theme.colors.paper,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  showcaseRow: {
-    flexDirection: 'row',
-    gap: 14,
-    marginBottom: 24,
-  },
-  photoSlot: {
+  screen: {
     flex: 1,
-    height: 220,
-    borderRadius: theme.radius.card,
-    backgroundColor: theme.colors.sand,
-    overflow: 'hidden',
+    backgroundColor: theme.colors.stage,
   },
-  photoImage: {
+  stageImage: {
+    ...StyleSheet.absoluteFill,
+  },
+  emptyStage: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingBottom: 220,
+  },
+  emptyTitle: {
+    fontFamily: theme.font,
+    fontSize: 17,
+    fontWeight: '600',
+    color: theme.colors.ink,
+    marginTop: 8,
+  },
+  emptySub: {
+    fontFamily: theme.font,
+    fontSize: 14,
+    color: theme.colors.muted,
+  },
+  bottomFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 380,
+  },
+  garmentTag: {
+    position: 'absolute',
+    top: '30%',
+    left: '16%',
+    padding: 4,
+    borderRadius: 12,
+    backgroundColor: theme.colors.card,
+    ...theme.shadow,
+  },
+  garmentTagImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+  },
+  tagRemove: {
+    position: 'absolute',
+    top: -7,
+    left: -7,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.danger,
+  },
+  bottomPanel: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    gap: 12,
+  },
+  panelLabel: {
+    fontFamily: theme.font,
+    fontSize: 13,
+    fontWeight: '500',
+    color: theme.colors.inkSoft,
+    paddingHorizontal: 20,
+  },
+  carousel: {
+    gap: 10,
+    paddingHorizontal: 16,
+  },
+  tile: {
+    width: 92,
+    height: 104,
+    borderRadius: theme.radius.tile,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    overflow: 'hidden',
+    backgroundColor: theme.colors.glass,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  tileSelected: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.card,
+  },
+  tileImage: {
     width: '100%',
     height: '100%',
   },
-  emptySlot: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 12,
-  },
-  emptySlotTitle: {
-    fontFamily: theme.fonts.display,
-    fontSize: 17,
-    fontWeight: '700',
-    color: theme.colors.ink,
-  },
-  emptySlotSub: {
-    fontFamily: theme.fonts.mono,
+  tileText: {
+    fontFamily: theme.font,
     fontSize: 12,
-    color: theme.colors.muted,
-    marginTop: 5,
-    textAlign: 'center',
+    fontWeight: '500',
+    color: theme.colors.inkSoft,
   },
-  progressTrack: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 24,
-  },
-  progressBarActive: {
-    width: 34,
-    height: 5,
-    borderRadius: theme.radius.pill,
-    backgroundColor: theme.colors.ink,
-  },
-  progressDot: {
-    width: 6,
-    height: 6,
-    borderRadius: theme.radius.pill,
-    backgroundColor: theme.colors.line,
-  },
-  bottomBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  skipBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 6,
-  },
-  skipText: {
-    fontFamily: theme.fonts.sans,
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.cobalt,
-  },
-  nextPill: {
-    backgroundColor: theme.colors.cobalt,
-    borderRadius: theme.radius.pill,
-    paddingVertical: 14,
-    paddingHorizontal: 26,
-  },
-  disabledPill: {
-    backgroundColor: theme.colors.line,
-  },
-  nextPillText: {
-    fontFamily: theme.fonts.sans,
-    color: theme.colors.paper,
-    fontSize: 14,
-    fontWeight: '700',
+  primary: {
+    marginHorizontal: 16,
   },
 });

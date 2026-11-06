@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -9,14 +8,14 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { Pill } from '../components/ui';
 import { theme } from '../theme';
 
-const FC_MONOGRAM = require('../../assets/android-icon-foreground.png');
+const FC_MONOGRAM = require('../../assets/icon.png');
 
 export default function LoginScreen() {
   const { enterDemoMode } = useAuth();
@@ -82,70 +81,68 @@ export default function LoginScreen() {
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <View style={styles.heroBlock}>
-          <Image
-            source={FC_MONOGRAM}
-            style={styles.monogramImage}
-            resizeMode="contain"
-          />
-
-          <View style={styles.wordmarkRow}>
-            <Text style={styles.wordmarkText}>FitCheck</Text>
-            <View style={styles.aiBadgePill}>
-              <Text style={styles.aiBadgeText}>AI</Text>
-            </View>
+          <View style={styles.logoCard}>
+            <Image
+              source={FC_MONOGRAM}
+              style={styles.monogramImage}
+              resizeMode="contain"
+            />
           </View>
 
+          <Text style={styles.wordmarkText}>FitCheck</Text>
           <Text style={styles.tagline}>
-            datang untuk gayanya,{'\n'}nyaman karena ukurannya pas
+            Virtual Closet & AI Fitting Studio
           </Text>
         </View>
 
-        <View style={styles.formBlock}>
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor={theme.colors.cobaltWash}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Password (min. 6 karakter)"
-            placeholderTextColor={theme.colors.cobaltWash}
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
-
-          {busy ? (
-            <ActivityIndicator
-              size="large"
-              color={theme.colors.paper}
-              style={styles.spinner}
+        <View style={styles.formCard}>
+          <View style={styles.formWell}>
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              placeholderTextColor={theme.colors.muted}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={email}
+              onChangeText={setEmail}
             />
-          ) : (
-            <View style={styles.pillRow}>
-              <TouchableOpacity style={styles.pillOutline} onPress={handleSignUp}>
-                <Text style={styles.pillOutlineText}>Daftar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.pillFilled} onPress={handleSignIn}>
-                <Text style={styles.pillFilledText}>Masuk</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+            <TextInput
+              style={styles.input}
+              placeholder="Password (min. 6 karakter)"
+              placeholderTextColor={theme.colors.muted}
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+            />
 
-          <TouchableOpacity
-            style={styles.demoLink}
-            onPress={() => enterDemoMode(email.trim() || 'demo@fitcheck.ai')}
-          >
-            <Text style={styles.demoLinkText}>
-              Lewati ke Mode Demo {!isSupabaseConfigured ? '(Tanpa Server)' : ''}
-            </Text>
-          </TouchableOpacity>
+            <Pill
+              variant="primary"
+              label="Masuk"
+              loading={busy}
+              disabled={busy}
+              onPress={handleSignIn}
+            />
+
+            <View style={styles.secondaryRow}>
+              <Pill
+                variant="chip"
+                label="Daftar akun"
+                disabled={busy}
+                onPress={handleSignUp}
+                style={styles.halfPill}
+              />
+              <Pill
+                variant="chip"
+                label="Mode Demo"
+                disabled={busy}
+                onPress={() => enterDemoMode(email.trim() || 'demo@fitcheck.ai')}
+                style={styles.halfPill}
+              />
+            </View>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -155,120 +152,72 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: theme.colors.cobalt,
+    backgroundColor: theme.colors.canvas,
   },
   container: {
     flexGrow: 1,
     justifyContent: 'space-between',
-    paddingHorizontal: 28,
-    paddingTop: 76,
+    paddingHorizontal: 18,
+    paddingTop: 84,
     paddingBottom: 40,
   },
   heroBlock: {
     alignItems: 'center',
   },
-  monogramImage: {
-    width: 184,
-    height: 184,
-    marginBottom: 16,
+  logoCard: {
+    padding: 6,
+    borderRadius: 28,
+    backgroundColor: theme.colors.card,
+    marginBottom: 18,
+    ...theme.shadow,
   },
-  wordmarkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 14,
+  monogramImage: {
+    width: 96,
+    height: 96,
+    borderRadius: 22,
   },
   wordmarkText: {
-    fontFamily: theme.fonts.display,
-    fontSize: 40,
+    fontFamily: theme.font,
+    fontSize: 32,
     fontWeight: '700',
-    color: theme.colors.paper,
-    letterSpacing: 0.3,
-  },
-  aiBadgePill: {
-    backgroundColor: theme.colors.azure,
-    borderRadius: 14,
-    paddingHorizontal: 11,
-    paddingVertical: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  aiBadgeText: {
-    fontFamily: theme.fonts.mono,
-    fontSize: 15,
-    fontWeight: '600',
-    color: theme.colors.paper,
+    color: theme.colors.ink,
+    letterSpacing: -0.6,
   },
   tagline: {
-    fontFamily: theme.fonts.mono,
-    color: theme.colors.cobaltWash,
+    fontFamily: theme.font,
+    color: theme.colors.muted,
     fontSize: 15,
     fontWeight: '400',
+    marginTop: 6,
     textAlign: 'center',
-    lineHeight: 24,
-    letterSpacing: 0.2,
   },
-  formBlock: {
-    marginTop: 24,
+  formCard: {
+    padding: 6,
+    borderRadius: theme.radius.card,
+    backgroundColor: theme.colors.card,
+    ...theme.shadow,
+  },
+  formWell: {
+    backgroundColor: theme.colors.well,
+    borderRadius: theme.radius.tile,
+    padding: 16,
+    gap: 12,
   },
   input: {
-    fontFamily: theme.fonts.sans,
-    borderWidth: 1.5,
-    borderColor: theme.colors.paper,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: 20,
-    paddingVertical: 13,
+    fontFamily: theme.font,
+    borderRadius: theme.radius.input,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 15,
-    color: theme.colors.paper,
-    marginBottom: 12,
-    backgroundColor: theme.colors.cobaltMuted,
+    color: theme.colors.ink,
+    backgroundColor: theme.colors.card,
   },
-  spinner: {
-    marginVertical: 16,
-  },
-  pillRow: {
+  secondaryRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 6,
+    gap: 10,
   },
-  pillOutline: {
+  halfPill: {
     flex: 1,
-    borderWidth: 1.5,
-    borderColor: theme.colors.paper,
-    borderRadius: theme.radius.pill,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  pillOutlineText: {
-    fontFamily: theme.fonts.sans,
-    color: theme.colors.paper,
-    fontSize: 15,
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
-  pillFilled: {
-    flex: 1,
-    backgroundColor: theme.colors.paper,
-    borderRadius: theme.radius.pill,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  pillFilledText: {
-    fontFamily: theme.fonts.sans,
-    color: theme.colors.cobalt,
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  demoLink: {
-    marginTop: 18,
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  demoLinkText: {
-    fontFamily: theme.fonts.sans,
-    color: theme.colors.cobaltWash,
-    fontSize: 13,
-    fontWeight: '500',
+    height: 44,
   },
 });

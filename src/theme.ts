@@ -1,51 +1,43 @@
-/*
- * Hallmark · v2.0.0 · redesign
- * theme: figcraft-brand (Deep Navy #0E2C75, Electric Azure #2F80ED, Warm Cream #FBF7EE, Soft Beige #EBE4D5)
- * genre: editorial · tone: relaxed-cozy
- * critique: 3-font relaxed & comfortable system (Arial Rounded MT Bold soft display, Avenir airy humanist sans, American Typewriter warm artisanal accent).
- */
-
 import { Platform } from 'react-native';
 
+// Light closet & model studio aesthetic (matching reference UI)
 export const theme = {
   colors: {
-    cream: '#FBF7EE',
-    sand: '#EBE4D5',
-    paper: '#FBF7EE',
-    cobalt: '#0E2C75',
-    azure: '#2F80ED',
-    cobaltMuted: '#173B94',
-    cobaltWash: '#D6E3FA',
-    ink: '#0E2C75',
-    muted: '#5C6479',
-    line: '#D9D0C1',
-    amberInk: '#8A4200',
-    amberBg: '#F3E3C6',
-    greenInk: '#125430',
-    greenBg: '#D9ECDF',
-    danger: '#B42318',
-    overlay: 'rgba(14, 44, 117, 0.92)',
-  },
-  fonts: {
-    display: Platform.select({
-      ios: 'Arial Rounded MT Bold',
-      android: 'sans-serif-medium',
-      default: 'sans-serif',
-    }),
-    sans: Platform.select({
-      ios: 'Avenir',
-      android: 'sans-serif',
-      default: 'sans-serif',
-    }),
-    mono: Platform.select({
-      ios: 'American Typewriter',
-      android: 'serif',
-      default: 'monospace',
-    }),
+    canvas: '#EEEEEF',
+    stage: '#DADADC',
+    card: '#FFFFFF',
+    well: '#F2F2F3',
+    chip: '#E3E3E5',
+    glass: 'rgba(255, 255, 255, 0.55)',
+    glassStrong: 'rgba(255, 255, 255, 0.82)',
+    ink: '#1C1C1E',
+    inkSoft: '#3A3A3C',
+    muted: '#8E8E93',
+    faint: '#C7C7CC',
+    onInk: '#FFFFFF',
+    primary: '#2C2C2E',
+    primaryDisabled: '#D1D1D6',
+    heart: '#FF3B30',
+    danger: '#FF3B30',
+    dangerBg: 'rgba(255, 59, 48, 0.10)',
+    warningInk: '#8A5A00',
+    warningBg: '#FFF2CC',
+    hairline: 'rgba(0, 0, 0, 0.06)',
+    backdrop: '#000000',
   },
   radius: {
     pill: 999,
-    card: 18,
-    input: 12,
+    card: 22,
+    tile: 18,
+    inner: 16,
+    input: 14,
+  },
+  font: Platform.select({ ios: 'System', default: 'sans-serif' }),
+  shadow: {
+    shadowColor: '#000000',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
 } as const;

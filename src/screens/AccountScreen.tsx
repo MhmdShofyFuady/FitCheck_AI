@@ -6,12 +6,13 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LogOut, Pencil, RotateCw, Trash2, X } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { Pill, TopBar, useDockSpace } from '../components/ui';
 import { theme } from '../theme';
 
 interface ProfileData {
@@ -26,6 +27,7 @@ const STORAGE_KEY = '@user_profile_measurements';
 
 export default function AccountScreen() {
   const { user, isDemo, signOut } = useAuth();
+  const dockSpace = useDockSpace();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -67,7 +69,7 @@ export default function AccountScreen() {
         if (cached) {
           loadedData = JSON.parse(cached);
         }
-      } catch { }
+      } catch {}
     }
 
     setProfile(loadedData);
@@ -183,282 +185,283 @@ export default function AccountScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.heading}>Klub FitCheck</Text>
-      <Text style={styles.subheading}>
-        {user?.email ?? 'Pengguna'} ({isDemo ? 'Mode Demo Lokal' : 'Supabase Aktif'})
-      </Text>
-
-      <View style={styles.headerRow}>
-        <Text style={styles.groupTitle}>Ukuran Tubuh Tersimpan</Text>
-        <View style={styles.headerActions}>
-          {!isEditing ? (
-            <TouchableOpacity
-              style={styles.pillOutline}
+    <View style={styles.screen}>
+      <TopBar
+        title="Profil"
+        subtitle={user?.email ?? 'Pengguna'}
+        left={<Pill label="Segarkan" icon={RotateCw} onPress={fetchProfile} />}
+        right={
+          !isEditing ? (
+            <Pill
+              label={profile ? 'Ubah' : 'Isi'}
+              icon={Pencil}
               onPress={() => setIsEditing(true)}
-            >
-              <Text style={styles.pillOutlineText}>
-                {profile ? 'Ubah' : 'Isi Ukuran'}
-              </Text>
-            </TouchableOpacity>
+            />
           ) : (
-            <TouchableOpacity
-              style={styles.pillOutline}
+            <Pill
+              label="Batal"
+              icon={X}
               onPress={() => {
                 syncFormWithProfile(profile);
                 setIsEditing(false);
               }}
-            >
-              <Text style={styles.pillOutlineText}>Batal</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity style={styles.refreshBtn} onPress={fetchProfile}>
-            <Text style={styles.refreshText}>Segarkan</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+            />
+          )
+        }
+      />
 
-      {loading ? (
-        <ActivityIndicator color={theme.colors.cobalt} style={{ marginVertical: 20 }} />
-      ) : isEditing ? (
-        <View style={styles.formBlock}>
-          <Text style={styles.label}>Lingkar Dada (cm) *</Text>
-          <TextInput
-            style={styles.input}
-            keyboardType="numeric"
-            value={chestCm}
-            onChangeText={setChestCm}
-            placeholder="Contoh: 96"
-            placeholderTextColor={theme.colors.muted}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[styles.container, { paddingBottom: dockSpace }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.accountBadgeCard}>
+          <View style={styles.accountInfoCol}>
+            <Text style={styles.accountEmail} numberOfLines={1}>
+              {user?.email ?? 'Pengguna'}
+            </Text>
+            <Text style={styles.accountMode}>
+              {isDemo ? 'Mode Demo Lokal' : 'Sinkronisasi Supabase Aktif'}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.sectionTitle}>Ukuran Tubuh Tersimpan</Text>
+
+        {loading ? (
+          <ActivityIndicator color={theme.colors.ink} style={styles.spinner} />
+        ) : isEditing ? (
+          <View style={styles.card}>
+            <Text style={styles.label}>Lingkar Dada (cm) *</Text>
+            <TextInput
+              style={styles.input}
+              keyboardType="numeric"
+              value={chestCm}
+              onChangeText={setChestCm}
+              placeholder="Contoh: 96"
+              placeholderTextColor={theme.colors.muted}
+            />
+
+            <View style={styles.row}>
+              <View style={styles.col}>
+                <Text style={styles.label}>Lebar Bahu (cm)</Text>
+                <TextInput
+                  style={styles.input}
+                  keyboardType="numeric"
+                  value={shoulderCm}
+                  onChangeText={setShoulderCm}
+                  placeholder="Contoh: 44"
+                  placeholderTextColor={theme.colors.muted}
+                />
+              </View>
+              <View style={styles.col}>
+                <Text style={styles.label}>Lingkar Pinggang (cm)</Text>
+                <TextInput
+                  style={styles.input}
+                  keyboardType="numeric"
+                  value={waistCm}
+                  onChangeText={setWaistCm}
+                  placeholder="Contoh: 82"
+                  placeholderTextColor={theme.colors.muted}
+                />
+              </View>
+            </View>
+
+            <View style={styles.row}>
+              <View style={styles.col}>
+                <Text style={styles.label}>Tinggi Badan (cm)</Text>
+                <TextInput
+                  style={styles.input}
+                  keyboardType="numeric"
+                  value={heightCm}
+                  onChangeText={setHeightCm}
+                  placeholder="Contoh: 172"
+                  placeholderTextColor={theme.colors.muted}
+                />
+              </View>
+              <View style={styles.col}>
+                <Text style={styles.label}>Berat Badan (kg)</Text>
+                <TextInput
+                  style={styles.input}
+                  keyboardType="numeric"
+                  value={weightKg}
+                  onChangeText={setWeightKg}
+                  placeholder="Contoh: 68"
+                  placeholderTextColor={theme.colors.muted}
+                />
+              </View>
+            </View>
+
+            <Pill
+              variant="primary"
+              label="Simpan ukuran tubuh"
+              loading={saving}
+              disabled={saving}
+              onPress={handleSaveProfile}
+              style={styles.saveBtn}
+            />
+          </View>
+        ) : profile ? (
+          <View style={styles.grid}>
+            {[
+              { label: 'Lingkar Dada', sub: 'Utama', val: `${profile.chest_cm ?? '-'} cm` },
+              { label: 'Lebar Bahu', sub: 'Sekunder', val: `${profile.shoulder_cm ?? '-'} cm` },
+              { label: 'Pinggang', sub: 'Sekunder', val: `${profile.waist_cm ?? '-'} cm` },
+              { label: 'Tinggi Badan', sub: 'Proporsi', val: `${profile.height_cm ?? '-'} cm` },
+              { label: 'Berat Badan', sub: 'Proporsi', val: `${profile.weight_kg ?? '-'} kg` },
+            ].map((item) => (
+              <View key={item.label} style={styles.metricTile}>
+                <View style={styles.metricWell}>
+                  <Text style={styles.metricSub}>{item.sub}</Text>
+                  <Text style={styles.metricValue}>{item.val}</Text>
+                  <Text style={styles.metricLabel}>{item.label}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.card}>
+            <Text style={styles.emptyText}>
+              Ukuran tubuh Anda belum disimpan. Simpan sekali untuk digunakan otomatis di setiap uji coba kaos.
+            </Text>
+            <Pill
+              variant="primary"
+              label="Masukkan ukuran sekarang"
+              onPress={() => setIsEditing(true)}
+            />
+          </View>
+        )}
+
+        <View style={styles.actionsStack}>
+          <Pill
+            variant="chip"
+            icon={LogOut}
+            label="Keluar akun"
+            onPress={signOut}
+            style={styles.actionPill}
           />
-
-          <View style={styles.row}>
-            <View style={styles.col}>
-              <Text style={styles.label}>Lebar Bahu (cm)</Text>
-              <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                value={shoulderCm}
-                onChangeText={setShoulderCm}
-                placeholder="Contoh: 44"
-                placeholderTextColor={theme.colors.muted}
-              />
-            </View>
-            <View style={styles.col}>
-              <Text style={styles.label}>Lingkar Pinggang (cm)</Text>
-              <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                value={waistCm}
-                onChangeText={setWaistCm}
-                placeholder="Contoh: 82"
-                placeholderTextColor={theme.colors.muted}
-              />
-            </View>
-          </View>
-
-          <View style={styles.row}>
-            <View style={styles.col}>
-              <Text style={styles.label}>Tinggi Badan (cm)</Text>
-              <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                value={heightCm}
-                onChangeText={setHeightCm}
-                placeholder="Contoh: 172"
-                placeholderTextColor={theme.colors.muted}
-              />
-            </View>
-            <View style={styles.col}>
-              <Text style={styles.label}>Berat Badan (kg)</Text>
-              <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                value={weightKg}
-                onChangeText={setWeightKg}
-                placeholder="Contoh: 68"
-                placeholderTextColor={theme.colors.muted}
-              />
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={styles.pillFilled}
-            disabled={saving}
-            onPress={handleSaveProfile}
-          >
-            {saving ? (
-              <ActivityIndicator color={theme.colors.paper} />
-            ) : (
-              <Text style={styles.pillFilledText}>Simpan Ukuran Tubuh</Text>
-            )}
-          </TouchableOpacity>
+          <Pill
+            variant="danger"
+            icon={Trash2}
+            label="Hapus semua data"
+            onPress={handleDeleteAllData}
+            style={styles.actionPill}
+          />
         </View>
-      ) : profile ? (
-        <View style={styles.specTable}>
-          <View style={styles.specRow}>
-            <Text style={styles.specName}>Lingkar Dada</Text>
-            <Text style={styles.specMeta}>Utama</Text>
-            <Text style={styles.specVal}>{profile.chest_cm ?? '-'} cm</Text>
-          </View>
-          <View style={styles.specRow}>
-            <Text style={styles.specName}>Lebar Bahu</Text>
-            <Text style={styles.specMeta}>Sekunder</Text>
-            <Text style={styles.specVal}>{profile.shoulder_cm ?? '-'} cm</Text>
-          </View>
-          <View style={styles.specRow}>
-            <Text style={styles.specName}>Lingkar Pinggang</Text>
-            <Text style={styles.specMeta}>Sekunder</Text>
-            <Text style={styles.specVal}>{profile.waist_cm ?? '-'} cm</Text>
-          </View>
-          <View style={styles.specRow}>
-            <Text style={styles.specName}>Tinggi Badan</Text>
-            <Text style={styles.specMeta}>Proporsi</Text>
-            <Text style={styles.specVal}>{profile.height_cm ?? '-'} cm</Text>
-          </View>
-          <View style={styles.specRow}>
-            <Text style={styles.specName}>Berat Badan</Text>
-            <Text style={styles.specMeta}>Proporsi</Text>
-            <Text style={styles.specVal}>{profile.weight_kg ?? '-'} kg</Text>
-          </View>
-        </View>
-      ) : (
-        <View style={styles.emptyBox}>
-          <Text style={styles.emptyText}>
-            Ukuran tubuh Anda belum disimpan. Simpan sekali untuk digunakan otomatis di setiap uji coba kaos.
-          </Text>
-          <TouchableOpacity
-            style={styles.pillFilled}
-            onPress={() => setIsEditing(true)}
-          >
-            <Text style={styles.pillFilledText}>Masukkan Ukuran Sekarang</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.dangerLink} onPress={handleDeleteAllData}>
-          <Text style={styles.dangerLinkText}>Hapus Semua Data</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.logoutPill} onPress={signOut}>
-          <Text style={styles.logoutPillText}>Keluar</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.canvas,
+  },
+  scrollView: {
+    flex: 1,
+  },
   container: {
-    paddingHorizontal: 22,
-    paddingTop: 12,
-    paddingBottom: 40,
-    backgroundColor: theme.colors.cream,
+    flexGrow: 1,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    gap: 14,
   },
-  heading: {
-    fontFamily: theme.fonts.display,
-    fontSize: 26,
-    fontWeight: '700',
+  accountBadgeCard: {
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.card,
+    padding: 16,
+    ...theme.shadow,
+  },
+  accountInfoCol: {
+    gap: 3,
+  },
+  accountEmail: {
+    fontFamily: theme.font,
     color: theme.colors.ink,
-    letterSpacing: 0.2,
-  },
-  subheading: {
-    fontFamily: theme.fonts.mono,
-    fontSize: 12,
-    color: theme.colors.muted,
-    marginTop: 6,
-    marginBottom: 22,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  groupTitle: {
-    fontFamily: theme.fonts.display,
-    fontSize: 17,
-    fontWeight: '700',
-    color: theme.colors.ink,
-  },
-  pillOutline: {
-    borderWidth: 1.2,
-    borderColor: theme.colors.cobalt,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
-  pillOutlineText: {
-    fontFamily: theme.fonts.sans,
-    color: theme.colors.cobalt,
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '600',
+    letterSpacing: -0.2,
   },
-  refreshBtn: {
-    paddingVertical: 6,
+  accountMode: {
+    fontFamily: theme.font,
+    color: theme.colors.muted,
+    fontSize: 13,
   },
-  refreshText: {
-    fontFamily: theme.fonts.sans,
+  sectionTitle: {
+    fontFamily: theme.font,
+    color: theme.colors.ink,
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+    paddingHorizontal: 4,
+    marginTop: 4,
+  },
+  spinner: {
+    marginVertical: 24,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  metricTile: {
+    width: '48%',
+    flexGrow: 1,
+    padding: 5,
+    borderRadius: theme.radius.card,
+    backgroundColor: theme.colors.card,
+    ...theme.shadow,
+  },
+  metricWell: {
+    backgroundColor: theme.colors.well,
+    borderRadius: theme.radius.tile,
+    padding: 16,
+    gap: 6,
+  },
+  metricSub: {
+    fontFamily: theme.font,
+    color: theme.colors.muted,
     fontSize: 12,
     fontWeight: '500',
-    color: theme.colors.muted,
   },
-  specTable: {
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.line,
-    marginBottom: 28,
+  metricValue: {
+    fontFamily: theme.font,
+    color: theme.colors.ink,
+    fontSize: 22,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.4,
   },
-  specRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.line,
-  },
-  specName: {
-    flex: 1.3,
-    fontFamily: theme.fonts.sans,
+  metricLabel: {
+    fontFamily: theme.font,
+    color: theme.colors.inkSoft,
     fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.ink,
+    fontWeight: '500',
   },
-  specMeta: {
-    flex: 1,
-    fontFamily: theme.fonts.mono,
-    fontSize: 12,
-    color: theme.colors.muted,
-  },
-  specVal: {
-    fontFamily: theme.fonts.mono,
-    fontSize: 13,
-    fontWeight: '600',
-    color: theme.colors.ink,
-  },
-  formBlock: {
-    marginBottom: 24,
+  card: {
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.card,
+    padding: 18,
+    gap: 10,
+    ...theme.shadow,
   },
   label: {
-    fontFamily: theme.fonts.sans,
+    fontFamily: theme.font,
+    color: theme.colors.inkSoft,
     fontSize: 13,
-    fontWeight: '600',
-    color: theme.colors.ink,
-    marginBottom: 6,
+    fontWeight: '500',
   },
   input: {
-    fontFamily: theme.fonts.mono,
-    backgroundColor: theme.colors.sand,
+    fontFamily: theme.font,
+    backgroundColor: theme.colors.well,
     borderRadius: theme.radius.input,
     paddingHorizontal: 14,
-    paddingVertical: 11,
+    paddingVertical: 12,
     fontSize: 15,
+    fontWeight: '500',
     color: theme.colors.ink,
-    marginBottom: 12,
+    marginBottom: 4,
   },
   row: {
     flexDirection: 'row',
@@ -466,60 +469,24 @@ const styles = StyleSheet.create({
   },
   col: {
     flex: 1,
+    gap: 6,
   },
-  pillFilled: {
-    backgroundColor: theme.colors.cobalt,
-    borderRadius: theme.radius.pill,
-    paddingVertical: 14,
-    paddingHorizontal: 22,
-    alignItems: 'center',
+  saveBtn: {
     marginTop: 6,
   },
-  pillFilledText: {
-    fontFamily: theme.fonts.sans,
-    color: theme.colors.paper,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  emptyBox: {
-    backgroundColor: theme.colors.sand,
-    borderRadius: theme.radius.card,
-    padding: 18,
-    marginBottom: 26,
-  },
   emptyText: {
-    fontFamily: theme.fonts.sans,
-    fontSize: 13,
+    fontFamily: theme.font,
     color: theme.colors.muted,
+    fontSize: 14,
     lineHeight: 20,
-    marginBottom: 12,
+    marginBottom: 6,
   },
-  bottomBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 12,
+  actionsStack: {
+    marginTop: 'auto',
+    paddingTop: 12,
+    gap: 10,
   },
-  dangerLink: {
-    paddingVertical: 10,
-  },
-  dangerLinkText: {
-    fontFamily: theme.fonts.sans,
-    color: theme.colors.danger,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  logoutPill: {
-    borderWidth: 1.5,
-    borderColor: theme.colors.ink,
-    borderRadius: theme.radius.pill,
-    paddingVertical: 11,
-    paddingHorizontal: 24,
-  },
-  logoutPillText: {
-    fontFamily: theme.fonts.sans,
-    color: theme.colors.ink,
-    fontSize: 13,
-    fontWeight: '700',
+  actionPill: {
+    height: 48,
   },
 });

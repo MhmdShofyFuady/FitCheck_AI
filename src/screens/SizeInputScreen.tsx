@@ -1,16 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { ArrowLeft, Check } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TryOnStackParamList } from '../navigation/types';
 import {
   BodyMeasurements,
@@ -21,6 +22,7 @@ import {
 } from '../utils/estimator';
 import { useAuth } from '../context/AuthContext';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { CircleButton, Pill, TopBar } from '../components/ui';
 import { theme } from '../theme';
 
 type Props = NativeStackScreenProps<TryOnStackParamList, 'SizeInput'>;
@@ -34,8 +36,9 @@ const STRETCH_OPTIONS: { label: string; value: StretchType }[] = [
 ];
 
 export default function SizeInputScreen({ route, navigation }: Props) {
-  const { personPhotoUri, garmentPhotoUri } = route.params;
+  const { personPhotoUri, garmentPhotoUri, garmentPreset } = route.params;
   const { user, isDemo } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [chestCm, setChestCm] = useState('96');
   const [heightCm, setHeightCm] = useState('172');
@@ -43,11 +46,21 @@ export default function SizeInputScreen({ route, navigation }: Props) {
   const [waistCm, setWaistCm] = useState('82');
   const [shoulderCm, setShoulderCm] = useState('44');
 
-  const [chestWidthCm, setChestWidthCm] = useState('52');
-  const [hemWidthCm, setHemWidthCm] = useState('52');
-  const [garmentShoulderCm, setGarmentShoulderCm] = useState('45');
-  const [lengthCm, setLengthCm] = useState('70');
-  const [stretchType, setStretchType] = useState<StretchType>('kaku');
+  const [chestWidthCm, setChestWidthCm] = useState(
+    garmentPreset?.chest_width_cm != null ? String(garmentPreset.chest_width_cm) : '52'
+  );
+  const [hemWidthCm, setHemWidthCm] = useState(
+    garmentPreset?.hem_width_cm != null ? String(garmentPreset.hem_width_cm) : '52'
+  );
+  const [garmentShoulderCm, setGarmentShoulderCm] = useState(
+    garmentPreset?.shoulder_width_cm != null ? String(garmentPreset.shoulder_width_cm) : '45'
+  );
+  const [lengthCm, setLengthCm] = useState(
+    garmentPreset?.length_cm != null ? String(garmentPreset.length_cm) : '70'
+  );
+  const [stretchType, setStretchType] = useState<StretchType>(
+    garmentPreset?.stretch_type ?? 'kaku'
+  );
 
   const [submitting, setSubmitting] = useState(false);
   const [savingBody, setSavingBody] = useState(false);
@@ -190,7 +203,8 @@ export default function SizeInputScreen({ route, navigation }: Props) {
       if (user && !isDemo && isSupabaseConfigured) {
         const ts = Date.now();
         const personImagePath = `${user.id}/person-${ts}.jpg`;
-        const garmentImagePath = `${user.id}/garment-${ts}.jpg`;
+        const garmentImagePath =
+          garmentPreset?.image_path ?? `${user.id}/garment-${ts}.jpg`;
 
         const uploadPhoto = async (uri: string, storagePath: string) => {
           const res = await fetch(uri);
@@ -199,9 +213,12 @@ export default function SizeInputScreen({ route, navigation }: Props) {
             .from('tryon-photos')
             .upload(storagePath, blob, { contentType: 'image/jpeg', upsert: true });
         };
+
         await Promise.all([
           uploadPhoto(personPhotoUri, personImagePath),
-          uploadPhoto(garmentPhotoUri, garmentImagePath),
+          garmentPreset?.image_path
+            ? Promise.resolve()
+            : uploadPhoto(garmentPhotoUri, garmentImagePath),
         ]).catch(() => {});
 
         await supabase.from('profiles').upsert({
@@ -214,15 +231,17 @@ export default function SizeInputScreen({ route, navigation }: Props) {
           updated_at: new Date().toISOString(),
         });
 
-        await supabase.from('garments').insert({
-          user_id: user.id,
-          chest_width_cm: garment.chest_width,
-          hem_width_cm: garment.hem_width ?? null,
-          shoulder_width_cm: garment.shoulder ?? null,
-          length_cm: garment.length ?? null,
-          stretch_type: garment.stretch_type,
-          image_path: garmentImagePath,
-        });
+        if (!garmentPreset) {
+          await supabase.from('garments').insert({
+            user_id: user.id,
+            chest_width_cm: garment.chest_width,
+            hem_width_cm: garment.hem_width ?? null,
+            shoulder_width_cm: garment.shoulder ?? null,
+            length_cm: garment.length ?? null,
+            stretch_type: garment.stretch_type,
+            image_path: garmentImagePath,
+          });
+        }
 
         const { data: jobData } = await supabase
           .from('tryon_jobs')
@@ -283,306 +302,219 @@ export default function SizeInputScreen({ route, navigation }: Props) {
     label: string,
     unit: string,
     val: string,
-    setter: (next: string) => void
+    setter: (next: string) => void,
+    isLast = false
   ) => (
-    <View style={styles.specRow} key={label}>
-      <Text style={styles.specName}>{label}</Text>
-      <Text style={styles.specUnit}>{unit}</Text>
-      <TextInput
-        style={styles.specInput}
-        keyboardType="numeric"
-        value={val}
-        onChangeText={setter}
-      />
-      <View style={styles.stepperPill}>
-        <TouchableOpacity
-          style={styles.stepBtn}
-          onPress={() => stepValue(val, -1, setter)}
-        >
-          <Text style={styles.stepBtnText}>-</Text>
-        </TouchableOpacity>
-        <Text style={styles.stepValueText}>{val || '0'}</Text>
-        <TouchableOpacity
-          style={styles.stepBtn}
-          onPress={() => stepValue(val, 1, setter)}
-        >
-          <Text style={styles.stepBtnText}>+</Text>
-        </TouchableOpacity>
+    <View key={label}>
+      <View style={styles.specRow}>
+        <Text style={styles.specName}>{label}</Text>
+        <Text style={styles.specUnit}>{unit}</Text>
+        <TextInput
+          style={styles.specInput}
+          keyboardType="numeric"
+          value={val}
+          onChangeText={setter}
+        />
+        <View style={styles.stepperGroup}>
+          <Pressable
+            style={styles.stepBtn}
+            onPress={() => stepValue(val, -1, setter)}
+          >
+            <Text style={styles.stepBtnText}>−</Text>
+          </Pressable>
+          <Pressable
+            style={styles.stepBtn}
+            onPress={() => stepValue(val, 1, setter)}
+          >
+            <Text style={styles.stepBtnText}>+</Text>
+          </Pressable>
+        </View>
       </View>
+      {!isLast && <View style={styles.hairline} />}
     </View>
   );
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.heading}>Ukuran Tubuh & Kaos</Text>
-      <Text style={styles.subheading}>
-        Sesuaikan ukuran lingkar tubuh Anda dan lebar datar kaos dari size chart toko.
-      </Text>
+    <View style={styles.screen}>
+      <TopBar
+        title="Ukuran"
+        subtitle="Tubuh & Size Chart Kaos"
+        left={
+          <CircleButton
+            icon={ArrowLeft}
+            accessibilityLabel="Kembali"
+            onPress={() => navigation.goBack()}
+          />
+        }
+        right={
+          <Pill
+            label="Simpan"
+            icon={Check}
+            loading={savingBody}
+            onPress={handleSaveBodyOnly}
+          />
+        }
+      />
 
-      <Text style={styles.groupTitle}>Profil Tubuh Anda</Text>
-      <View style={styles.specTable}>
-        {renderSpecRow('Lingkar Dada *', 'cm', chestCm, setChestCm)}
-        {renderSpecRow('Lebar Bahu', 'cm', shoulderCm, setShoulderCm)}
-        {renderSpecRow('Lingkar Pinggang', 'cm', waistCm, setWaistCm)}
-        {renderSpecRow('Tinggi Badan', 'cm', heightCm, setHeightCm)}
-        {renderSpecRow('Berat Badan', 'kg', weightKg, setWeightKg)}
-      </View>
-
-      <TouchableOpacity
-        style={styles.saveProfilePill}
-        onPress={handleSaveBodyOnly}
-        disabled={savingBody}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.container,
+          { paddingBottom: Math.max(insets.bottom + 24, 36) },
+        ]}
+        showsVerticalScrollIndicator={false}
       >
-        {savingBody ? (
-          <ActivityIndicator size="small" color={theme.colors.cobalt} />
-        ) : (
-          <Text style={styles.saveProfilePillText}>Simpan Ukuran ke Profil</Text>
-        )}
-      </TouchableOpacity>
+        <View style={styles.sectionBlock}>
+          <Text style={styles.groupTitle}>Profil Tubuh Anda</Text>
+          <View style={styles.card}>
+            <View style={styles.well}>
+              {renderSpecRow('Lingkar Dada *', 'cm', chestCm, setChestCm)}
+              {renderSpecRow('Lebar Bahu', 'cm', shoulderCm, setShoulderCm)}
+              {renderSpecRow('Lingkar Pinggang', 'cm', waistCm, setWaistCm)}
+              {renderSpecRow('Tinggi Badan', 'cm', heightCm, setHeightCm)}
+              {renderSpecRow('Berat Badan', 'kg', weightKg, setWeightKg, true)}
+            </View>
+          </View>
+        </View>
 
-      <Text style={styles.groupTitle}>Size Chart Kaos (Datar)</Text>
-      <View style={styles.specTable}>
-        {renderSpecRow('Lebar Dada *', 'cm', chestWidthCm, setChestWidthCm)}
-        {renderSpecRow('Lebar Bahu', 'cm', garmentShoulderCm, setGarmentShoulderCm)}
-        {renderSpecRow('Lebar Bawah', 'cm', hemWidthCm, setHemWidthCm)}
-        {renderSpecRow('Panjang Kaos', 'cm', lengthCm, setLengthCm)}
-      </View>
+        <View style={styles.sectionBlock}>
+          <Text style={styles.groupTitle}>Size Chart Kaos (Datar)</Text>
+          <View style={styles.card}>
+            <View style={styles.well}>
+              {renderSpecRow('Lebar Dada *', 'cm', chestWidthCm, setChestWidthCm)}
+              {renderSpecRow('Lebar Bahu', 'cm', garmentShoulderCm, setGarmentShoulderCm)}
+              {renderSpecRow('Lebar Bawah', 'cm', hemWidthCm, setHemWidthCm)}
+              {renderSpecRow('Panjang Kaos', 'cm', lengthCm, setLengthCm, true)}
+            </View>
+          </View>
+        </View>
 
-      <Text style={styles.groupTitle}>Karakter Bahan</Text>
-      <View style={styles.stretchRow}>
-        {STRETCH_OPTIONS.map((opt) => {
-          const active = stretchType === opt.value;
-          return (
-            <TouchableOpacity
-              key={opt.value}
-              style={[styles.stretchPill, active && styles.stretchPillActive]}
-              onPress={() => setStretchType(opt.value)}
-            >
-              <Text
-                style={[
-                  styles.stretchPillText,
-                  active && styles.stretchPillTextActive,
-                ]}
-              >
-                {opt.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+        <View style={styles.sectionBlock}>
+          <Text style={styles.groupTitle}>Karakter Bahan</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipRow}
+          >
+            {STRETCH_OPTIONS.map((opt) => (
+              <Pill
+                key={opt.value}
+                label={opt.label}
+                variant={stretchType === opt.value ? 'chipActive' : 'chip'}
+                onPress={() => setStretchType(opt.value)}
+              />
+            ))}
+          </ScrollView>
+        </View>
 
-      <View style={styles.progressTrack}>
-        <View style={styles.progressDot} />
-        <View style={styles.progressBarActive} />
-        <View style={styles.progressDot} />
-      </View>
-
-      <View style={styles.bottomBar}>
-        <TouchableOpacity
-          style={styles.backLink}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backLinkText}>Kembali</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.submitPill}
+        <Pill
+          variant="primary"
+          label="Proses Try-On"
+          loading={submitting}
           disabled={submitting}
           onPress={handleCalculate}
-        >
-          {submitting ? (
-            <ActivityIndicator color={theme.colors.paper} />
-          ) : (
-            <Text style={styles.submitPillText}>Proses Try-On</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+          style={styles.submitBtn}
+        />
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.canvas,
+  },
+  scrollView: {
+    flex: 1,
+  },
   container: {
-    paddingHorizontal: 22,
-    paddingTop: 12,
-    paddingBottom: 40,
-    backgroundColor: theme.colors.cream,
+    flexGrow: 1,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    gap: 18,
   },
-  heading: {
-    fontFamily: theme.fonts.display,
-    fontSize: 26,
-    fontWeight: '700',
-    color: theme.colors.ink,
-    letterSpacing: 0.2,
-  },
-  subheading: {
-    fontFamily: theme.fonts.sans,
-    fontSize: 14,
-    fontWeight: '500',
-    color: theme.colors.muted,
-    marginTop: 6,
-    lineHeight: 22,
-    marginBottom: 18,
+  sectionBlock: {
+    gap: 10,
   },
   groupTitle: {
-    fontFamily: theme.fonts.display,
-    fontSize: 17,
-    fontWeight: '700',
+    fontFamily: theme.font,
     color: theme.colors.ink,
-    marginBottom: 8,
-    marginTop: 6,
-    letterSpacing: 0.2,
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+    paddingHorizontal: 4,
   },
-  specTable: {
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.line,
-    marginBottom: 12,
+  card: {
+    padding: 5,
+    borderRadius: theme.radius.card,
+    backgroundColor: theme.colors.card,
+    ...theme.shadow,
+  },
+  well: {
+    borderRadius: theme.radius.tile,
+    backgroundColor: theme.colors.well,
+    overflow: 'hidden',
   },
   specRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 11,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.line,
+    paddingHorizontal: 14,
+  },
+  hairline: {
+    height: 1,
+    backgroundColor: theme.colors.hairline,
+    marginHorizontal: 14,
   },
   specName: {
     flex: 1.3,
-    fontFamily: theme.fonts.sans,
-    fontSize: 14,
-    fontWeight: '600',
+    fontFamily: theme.font,
     color: theme.colors.ink,
+    fontSize: 14,
+    fontWeight: '500',
   },
   specUnit: {
-    width: 34,
-    fontFamily: theme.fonts.mono,
-    fontSize: 12,
+    width: 30,
+    fontFamily: theme.font,
     color: theme.colors.muted,
+    fontSize: 13,
   },
   specInput: {
-    width: 54,
-    backgroundColor: theme.colors.sand,
-    borderRadius: 8,
-    paddingVertical: 5,
+    width: 56,
+    backgroundColor: theme.colors.card,
+    borderRadius: 10,
+    paddingVertical: 6,
     paddingHorizontal: 8,
-    fontFamily: theme.fonts.mono,
-    fontSize: 13,
+    fontFamily: theme.font,
+    fontVariant: ['tabular-nums'],
+    fontSize: 14,
     fontWeight: '600',
     color: theme.colors.ink,
     textAlign: 'center',
-    marginRight: 10,
+    marginRight: 8,
   },
-  stepperPill: {
+  stepperGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.cobalt,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    minWidth: 86,
-    justifyContent: 'space-between',
+    backgroundColor: theme.colors.chip,
+    borderRadius: 10,
+    overflow: 'hidden',
   },
   stepBtn: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
   },
   stepBtnText: {
-    fontFamily: theme.fonts.mono,
-    color: theme.colors.paper,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  stepValueText: {
-    fontFamily: theme.fonts.mono,
-    color: theme.colors.paper,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  saveProfilePill: {
-    alignSelf: 'flex-start',
-    borderWidth: 1.2,
-    borderColor: theme.colors.cobalt,
-    borderRadius: theme.radius.pill,
-    paddingVertical: 8,
-    paddingHorizontal: 18,
-    marginBottom: 18,
-  },
-  saveProfilePillText: {
-    fontFamily: theme.fonts.sans,
-    fontSize: 13,
-    fontWeight: '600',
-    color: theme.colors.cobalt,
-  },
-  stretchRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 24,
-  },
-  stretchPill: {
-    flex: 1,
-    borderWidth: 1.2,
-    borderColor: theme.colors.cobalt,
-    borderRadius: theme.radius.pill,
-    paddingVertical: 9,
-    alignItems: 'center',
-  },
-  stretchPillActive: {
-    backgroundColor: theme.colors.cobalt,
-  },
-  stretchPillText: {
-    fontFamily: theme.fonts.sans,
-    fontSize: 13,
-    fontWeight: '600',
-    color: theme.colors.cobalt,
-  },
-  stretchPillTextActive: {
-    color: theme.colors.paper,
-  },
-  progressTrack: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 22,
-  },
-  progressBarActive: {
-    width: 34,
-    height: 5,
-    borderRadius: theme.radius.pill,
-    backgroundColor: theme.colors.ink,
-  },
-  progressDot: {
-    width: 6,
-    height: 6,
-    borderRadius: theme.radius.pill,
-    backgroundColor: theme.colors.line,
-  },
-  bottomBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  backLink: {
-    paddingVertical: 10,
-    paddingHorizontal: 6,
-  },
-  backLinkText: {
-    fontFamily: theme.fonts.sans,
-    fontSize: 14,
-    fontWeight: '600',
+    fontFamily: theme.font,
     color: theme.colors.ink,
+    fontSize: 16,
+    fontWeight: '600',
   },
-  submitPill: {
-    backgroundColor: theme.colors.cobalt,
-    borderRadius: theme.radius.pill,
-    paddingVertical: 14,
-    paddingHorizontal: 26,
-    minWidth: 160,
-    alignItems: 'center',
+  chipRow: {
+    gap: 8,
   },
-  submitPillText: {
-    fontFamily: theme.fonts.sans,
-    color: theme.colors.paper,
-    fontSize: 14,
-    fontWeight: '700',
+  submitBtn: {
+    marginTop: 'auto',
   },
 });

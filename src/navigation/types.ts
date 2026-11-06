@@ -1,18 +1,21 @@
+import { NavigatorScreenParams } from '@react-navigation/native';
 import {
   BodyMeasurements,
   FitCalculationResult,
   GarmentMeasurements,
 } from '../utils/estimator';
+import { ClosetGarment } from '../hooks/useCloset';
 
 export type AuthStackParamList = {
   Login: undefined;
 };
 
 export type TryOnStackParamList = {
-  PhotoUpload: undefined;
+  PhotoUpload: { garment?: ClosetGarment } | undefined;
   SizeInput: {
     personPhotoUri: string;
     garmentPhotoUri: string;
+    garmentPreset?: ClosetGarment;
   };
   Result: {
     personPhotoUri: string;
@@ -25,11 +28,8 @@ export type TryOnStackParamList = {
   };
 };
 
-export type ProfileStackParamList = {
-  Account: undefined;
-};
-
 export type MainTabParamList = {
-  TryOnTab: undefined;
+  ClosetTab: undefined;
+  TryOnTab: NavigatorScreenParams<TryOnStackParamList> | undefined;
   ProfileTab: undefined;
 };
